@@ -154,8 +154,9 @@ def sample_documents(lang, n, from_filtered=False, seed=None):
     rng = random.Random(seed)
     reservoir = []
     seen = 0
+    t0 = time.time()
 
-    for filepath in parquet_files:
+    for fi, filepath in enumerate(parquet_files):
         pf = pq.ParquetFile(filepath)
         for rg_idx in range(pf.num_row_groups):
             rg = pf.read_row_group(rg_idx)
@@ -174,6 +175,11 @@ def sample_documents(lang, n, from_filtered=False, seed=None):
                     if j < n:
                         reservoir[j] = {"doc_id": doc_id, "text": text, "url": url}
 
+        elapsed = time.time() - t0
+        pct = 100 * (fi + 1) / len(parquet_files)
+        print(f"\r  Sampling: file {fi+1}/{len(parquet_files)} ({pct:.0f}%), {seen:,} docs seen, {elapsed:.0f}s", end="", flush=True)
+
+    print(f"\r  Sampling done: {seen:,} docs in {time.time()-t0:.0f}s" + " " * 20)
     return reservoir
 
 

@@ -209,8 +209,10 @@ def make_filtered_dataloader(tokenizer, B, T, lang):
     def _doc_iterator():
         """Infinite iterator over cleaned, tokenized docs from selected set."""
         epoch = 1
+        docs_yielded = 0
+        t_start = time.time()
         while True:
-            for filepath in parquet_files:
+            for fi, filepath in enumerate(parquet_files):
                 pf = pq.ParquetFile(filepath)
                 for rg_idx in range(pf.num_row_groups):
                     rg = pf.read_row_group(rg_idx)
@@ -229,6 +231,7 @@ def make_filtered_dataloader(tokenizer, B, T, lang):
                         if len(batch_texts) >= TOKENIZE_BATCH:
                             token_lists = tokenizer.encode(batch_texts, prepend=bos_token)
                             for tokens in token_lists:
+                                docs_yielded += 1
                                 yield tokens, epoch
                             batch_texts = []
 
@@ -236,8 +239,14 @@ def make_filtered_dataloader(tokenizer, B, T, lang):
                     if batch_texts:
                         token_lists = tokenizer.encode(batch_texts, prepend=bos_token)
                         for tokens in token_lists:
+                            docs_yielded += 1
                             yield tokens, epoch
                         batch_texts = []
+
+                # Log once per file
+                if fi == 0 or (fi + 1) % 5 == 0:
+                    elapsed = time.time() - t_start
+                    print(f"  [dataloader] epoch {epoch}, file {fi+1}/{len(parquet_files)}, {docs_yielded:,} docs, {elapsed:.0f}s")
 
             epoch += 1
 

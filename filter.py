@@ -45,13 +45,15 @@ def apply_pipeline(lang, preview=0):
         with open(eval_ids_path) as f:
             eval_ids = set(json.load(f))
 
+    import time
     total = 0
     kept = 0
     cleaned_count = 0
     selected_ids = []
     preview_docs = []
+    t0 = time.time()
 
-    for filepath in parquet_files:
+    for fi, filepath in enumerate(parquet_files):
         pf = pq.ParquetFile(filepath)
         for rg_idx in range(pf.num_row_groups):
             rg = pf.read_row_group(rg_idx)
@@ -79,16 +81,21 @@ def apply_pipeline(lang, preview=0):
                             "text_preview": cleaned[:500],
                         })
 
-            if total % 1_000_000 == 0:
-                print(f"  Processed {total:,} docs, kept {kept:,} ({100*kept/max(total,1):.1f}%)")
+            if total % 500_000 == 0 and total > 0:
+                elapsed = time.time() - t0
+                rate = total / elapsed
+                print(f"\r  [{fi+1}/{len(parquet_files)} files] {total:,} docs, kept {kept:,} ({100*kept/max(total,1):.1f}%), {rate:,.0f} docs/s", end="", flush=True)
 
     # Save selected doc IDs
     output_path = os.path.join(lang_dir, "selected_doc_ids.json")
     with open(output_path, "w") as f:
         json.dump(selected_ids, f)
 
+    elapsed = time.time() - t0
+    print()
     print()
     print(f"Total docs:    {total:,}")
+    print(f"Time:          {elapsed:.0f}s ({total/max(elapsed,1):,.0f} docs/s)")
     print(f"Kept:          {kept:,} ({100*kept/max(total,1):.1f}%)")
     print(f"Dropped:       {total - kept:,} ({100*(total-kept)/max(total,1):.1f}%)")
     print(f"Cleaned:       {cleaned_count:,} ({100*cleaned_count/max(total,1):.1f}%)")
