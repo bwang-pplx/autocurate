@@ -4,6 +4,7 @@
 #SBATCH --error=logs/loop_%j.err
 #SBATCH --time=24:00:00
 #SBATCH --gpus=8
+#SBATCH --qos=search
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=0
 
