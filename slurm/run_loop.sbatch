@@ -41,13 +41,15 @@ if [ ! -f "$VLLM_VENV/bin/vllm" ]; then
     echo "$(date) | Installing vLLM (this takes a few minutes)..."
     VIRTUAL_ENV="$VLLM_VENV" uv pip install vllm 2>&1 | tail -3
 fi
+# Patch vLLM to skip SageMaker bootstrap (crashes on non-SageMaker hosts)
+SAGEMAKER_ROUTER="$VLLM_VENV/lib/python3.10/site-packages/vllm/entrypoints/sagemaker/api_router.py"
+if grep -q "sagemaker_standards.bootstrap" "$SAGEMAKER_ROUTER" 2>/dev/null; then
+    echo "$(date) | Patching vLLM to skip SageMaker bootstrap..."
+    sed -i 's/return sagemaker_standards.bootstrap(app)/return app/' "$SAGEMAKER_ROUTER"
+fi
+
 echo "$(date) | Starting vLLM server on GPU 0-3 (TP=4)..."
-# SAGEMAKER_MULTI_MODEL=false prevents SageMaker handler from loading /opt/ml/model
-CUDA_VISIBLE_DEVICES=0,1,2,3 \
-    SAGEMAKER_MULTI_MODEL=false \
-    SAGEMAKER_PROGRAM="" \
-    SAGEMAKER_SUBMIT_DIRECTORY="" \
-    "$VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
+CUDA_VISIBLE_DEVICES=0,1,2,3 "$VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
     --model Qwen/Qwen3.5-35B-A3B \
     --tensor-parallel-size 4 \
     --max-model-len 32768 \
