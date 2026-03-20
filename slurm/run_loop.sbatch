@@ -40,6 +40,8 @@ if [ ! -f "$VLLM_VENV/bin/vllm" ]; then
     uv venv "$VLLM_VENV" --python 3.10 2>&1
     echo "$(date) | Installing vLLM (this takes a few minutes)..."
     VIRTUAL_ENV="$VLLM_VENV" uv pip install vllm 2>&1 | tail -3
+    # Remove SageMaker integration that crashes on non-SageMaker hosts
+    VIRTUAL_ENV="$VLLM_VENV" uv pip uninstall model-hosting-container-standards 2>&1 || true
 fi
 echo "$(date) | Starting vLLM server on GPU 0-3 (TP=4)..."
 CUDA_VISIBLE_DEVICES=0,1,2,3 "$VLLM_VENV/bin/vllm" serve Qwen/Qwen3.5-35B-A3B \
