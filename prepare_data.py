@@ -93,7 +93,9 @@ def download_language(lang, max_docs=None):
                     break
             continue
 
-        print(f"  [{i+1}/{len(parquet_files)}] Downloading {os.path.basename(f.path)} ({f.size / 1e9:.1f} GB)...")
+        t0 = time.time()
+        size_gb = f.size / 1e9 if hasattr(f, 'size') and f.size else 0
+        print(f"  [{i+1}/{len(parquet_files)}] Downloading {os.path.basename(f.path)} ({size_gb:.1f} GB)...", flush=True)
         dl_path = hf_hub_download(
             repo_id=HF_DATASET,
             filename=f.path,
@@ -101,6 +103,9 @@ def download_language(lang, max_docs=None):
             local_dir=raw_dir,
             local_dir_use_symlinks=False,
         )
+        elapsed = time.time() - t0
+        speed = size_gb / max(elapsed, 1) * 1024  # MB/s
+        print(f"  [{i+1}/{len(parquet_files)}] Done in {elapsed:.0f}s ({speed:.0f} MB/s)", flush=True)
         # hf_hub_download returns the actual path; move to flat structure
         if dl_path != local_path and os.path.exists(dl_path):
             os.rename(dl_path, local_path)
@@ -113,7 +118,8 @@ def download_language(lang, max_docs=None):
                 print(f"  Reached {total_docs} docs (max_docs={max_docs}), stopping")
                 break
 
-    print(f"Download complete: {len(downloaded)} files")
+    total_size = sum(os.path.getsize(p) for p in downloaded if os.path.exists(p))
+    print(f"Download complete: {len(downloaded)} files, {total_size/1e9:.1f} GB total")
     return downloaded
 
 # ---------------------------------------------------------------------------

@@ -13,6 +13,10 @@
 LANG="${1:-dan_Latn}"
 mkdir -p logs
 
-echo "$(date) | Downloading fineweb-2 for $LANG on $(hostname)"
-uv run prepare_data.py --lang "$LANG"
+echo "$(date) | Node: $(hostname)"
+echo "$(date) | Installing dependencies (uv sync)..."
+uv sync 2>&1
+echo "$(date) | Dependencies ready."
+echo "$(date) | Downloading fineweb-2 for $LANG..."
+PYTHONUNBUFFERED=1 uv run prepare_data.py --lang "$LANG" 2>&1
 echo "$(date) | Download complete."

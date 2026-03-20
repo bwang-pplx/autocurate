@@ -17,6 +17,10 @@ LANG_CODE=$(echo "$LANG" | cut -d'_' -f1)
 
 mkdir -p logs
 
+echo "$(date) | Installing dependencies..."
+uv sync 2>&1
+echo "$(date) | Dependencies ready."
+echo ""
 echo "$(date) | Autoresearch Data Quality Loop"
 echo "Language: $LANG"
 echo "Max iterations: $MAX_ITERATIONS"
