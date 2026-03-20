@@ -64,12 +64,18 @@ def download_language(lang, max_docs=None):
     os.makedirs(raw_dir, exist_ok=True)
 
     api = HfApi()
-    files = list(api.list_repo_tree(
-        HF_DATASET,
-        path_in_repo=f"data/{lang}",
-        repo_type="dataset",
-    ))
-    parquet_files = [f for f in files if hasattr(f, 'path') and f.path.endswith('.parquet')]
+    # Parquet files are under data/{lang}/train/ (and optionally test/)
+    parquet_files = []
+    for split in ["train", "test"]:
+        try:
+            files = list(api.list_repo_tree(
+                HF_DATASET,
+                path_in_repo=f"data/{lang}/{split}",
+                repo_type="dataset",
+            ))
+            parquet_files.extend([f for f in files if hasattr(f, 'path') and f.path.endswith('.parquet')])
+        except Exception:
+            pass  # split may not exist
     print(f"Found {len(parquet_files)} parquet files for {lang}")
 
     total_docs = 0
@@ -87,18 +93,17 @@ def download_language(lang, max_docs=None):
                     break
             continue
 
-        print(f"  [{i+1}/{len(parquet_files)}] Downloading {os.path.basename(f.path)}...")
-        hf_hub_download(
+        print(f"  [{i+1}/{len(parquet_files)}] Downloading {os.path.basename(f.path)} ({f.size / 1e9:.1f} GB)...")
+        dl_path = hf_hub_download(
             repo_id=HF_DATASET,
             filename=f.path,
             repo_type="dataset",
             local_dir=raw_dir,
             local_dir_use_symlinks=False,
         )
-        # hf_hub_download may put files in subdirs
-        hf_path = os.path.join(raw_dir, f.path)
-        if os.path.exists(hf_path) and hf_path != local_path:
-            os.rename(hf_path, local_path)
+        # hf_hub_download returns the actual path; move to flat structure
+        if dl_path != local_path and os.path.exists(dl_path):
+            os.rename(dl_path, local_path)
         downloaded.append(local_path)
 
         if max_docs:
