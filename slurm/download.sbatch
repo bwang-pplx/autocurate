@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=dl-fineweb2
 #SBATCH --output=logs/download_%j.out
-#SBATCH --error=logs/download_%j.err
+#SBATCH --error=logs/download_%j.out
 #SBATCH --time=08:00:00
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G

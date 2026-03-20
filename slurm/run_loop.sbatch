@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=autoresearch-data
 #SBATCH --output=logs/loop_%j.out
-#SBATCH --error=logs/loop_%j.err
+#SBATCH --error=logs/loop_%j.out
 #SBATCH --time=24:00:00
 #SBATCH --gpus=8
 #SBATCH --qos=search
