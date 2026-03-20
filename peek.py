@@ -183,8 +183,16 @@ def sample_documents(lang, n, from_filtered=False, seed=None):
     return reservoir
 
 
-def format_documents(docs, max_chars_per_doc=1000):
-    """Format documents for the prompt."""
+MAX_PROMPT_CHARS = 80_000  # ~20K tokens, safe for 32K context with response room
+
+def format_documents(docs, max_chars_per_doc=None):
+    """Format documents for the prompt, auto-fitting to context budget."""
+    if max_chars_per_doc is None:
+        # Reserve ~5K chars for prompt template + response
+        budget = MAX_PROMPT_CHARS
+        overhead_per_doc = 60  # "--- Document N (url: ...) ---\n"
+        max_chars_per_doc = max(200, (budget // len(docs)) - overhead_per_doc)
+
     parts = []
     for i, doc in enumerate(docs):
         text = doc["text"][:max_chars_per_doc]
