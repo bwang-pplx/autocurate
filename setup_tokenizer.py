@@ -1,6 +1,6 @@
 """
 Set up a multilingual tokenizer for data-quality experiments.
-Uses tiktoken's cl100k_base (GPT-4 tokenizer) which covers all languages well.
+Uses tiktoken's o200k_base (GPT-4o tokenizer, 200K vocab) which has the best multilingual coverage.
 
 Usage: python setup_tokenizer.py
 
@@ -30,9 +30,9 @@ def setup():
 
     os.makedirs(TOKENIZER_DIR, exist_ok=True)
 
-    # Use cl100k_base (GPT-4 tokenizer) — multilingual, 100K vocab
-    print("Loading cl100k_base tokenizer...")
-    base = tiktoken.get_encoding("cl100k_base")
+    # Use o200k_base (GPT-4 tokenizer) — multilingual, 100K vocab
+    print("Loading o200k_base tokenizer...")
+    base = tiktoken.get_encoding("o200k_base")
 
     # Re-wrap with our special tokens
     mergeable_ranks = base._mergeable_ranks
@@ -41,7 +41,7 @@ def setup():
     special_tokens = {name: tokens_offset + i for i, name in enumerate(SPECIAL_TOKENS)}
 
     enc = tiktoken.Encoding(
-        name="cl100k_data",
+        name="o200k_data",
         pat_str=pat_str,
         mergeable_ranks=mergeable_ranks,
         special_tokens=special_tokens,
