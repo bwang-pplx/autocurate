@@ -1,6 +1,9 @@
 #!/bin/bash
 # Launch the full data-quality autoresearch pipeline on SLURM.
-# Usage: bash slurm/launch.sh [--lang dan_Latn] [--iterations 50]
+# Usage: bash slurm/launch.sh [LANG] [ITERATIONS]
+#
+# Example:
+#   bash slurm/launch.sh dan_Latn 100
 
 set -e
 
@@ -12,22 +15,21 @@ echo "Language: $LANG"
 echo "Iterations: $ITERATIONS"
 echo ""
 
-# Step 1: Download data (CPU job, run first)
-echo "Step 1: Submitting data download job..."
+mkdir -p logs
+
+# Step 1: Download data (1 GPU for torch import, mostly CPU/network)
+echo "Submitting download job..."
 DL_JOB=$(sbatch --parsable slurm/download.sbatch "$LANG")
 echo "  Download job: $DL_JOB"
 
-# Step 2: Start vLLM server (1 GPU, starts after download)
-echo "Step 2: Submitting vLLM server job..."
-VLLM_JOB=$(sbatch --parsable --dependency=afterok:$DL_JOB slurm/vllm_server.sbatch)
-echo "  vLLM job: $VLLM_JOB"
-
-# Step 3: Run the experiment loop (1 GPU, starts after vLLM is up)
-echo "Step 3: Submitting experiment loop job..."
-LOOP_JOB=$(sbatch --parsable --dependency=afterok:$DL_JOB slurm/run_loop.sbatch "$LANG" "$ITERATIONS" "$VLLM_JOB")
+# Step 2: Run the loop (2 GPUs: vLLM + training, starts after download)
+echo "Submitting experiment loop job..."
+LOOP_JOB=$(sbatch --parsable --dependency=afterok:$DL_JOB slurm/run_loop.sbatch "$LANG" "$ITERATIONS")
 echo "  Loop job: $LOOP_JOB"
 
 echo ""
-echo "All jobs submitted. Monitor with:"
+echo "Monitor:"
 echo "  squeue -u \$USER"
-echo "  tail -f logs/loop_\${LOOP_JOB}.out"
+echo "  tail -f logs/download_${DL_JOB}.out   # download progress"
+echo "  tail -f logs/loop_${LOOP_JOB}.out      # experiment loop"
+echo "  cat results.tsv                         # results table"
