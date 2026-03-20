@@ -33,8 +33,10 @@ echo ""
 # Start vLLM server on GPU 0
 # ---------------------------------------------------------------------------
 
+echo "$(date) | Installing vLLM..."
+uv pip install vllm 2>&1 | tail -1
 echo "$(date) | Starting vLLM server on GPU 0-6 (TP=7)..."
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 vllm serve Qwen/Qwen3.5-35B-A3B \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 uv run vllm serve Qwen/Qwen3.5-35B-A3B \
     --tensor-parallel-size 7 \
     --max-model-len 32768 \
     --host 0.0.0.0 \
