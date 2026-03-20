@@ -183,7 +183,7 @@ def sample_documents(lang, n, from_filtered=False, seed=None):
     return reservoir
 
 
-def format_documents(docs, max_chars_per_doc=3000):
+def format_documents(docs, max_chars_per_doc=1000):
     """Format documents for the prompt."""
     parts = []
     for i, doc in enumerate(docs):
@@ -210,7 +210,9 @@ def query_qwen(prompt):
         },
         timeout=300,
     )
-    response.raise_for_status()
+    if response.status_code != 200:
+        print(f"  vLLM error {response.status_code}: {response.text[:500]}", flush=True)
+        response.raise_for_status()
     return response.json()["choices"][0]["message"]["content"]
 
 # ---------------------------------------------------------------------------
