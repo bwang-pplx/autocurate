@@ -33,10 +33,16 @@ echo ""
 # Start vLLM server on GPU 0
 # ---------------------------------------------------------------------------
 
-echo "$(date) | Installing vLLM..."
-uv pip install vllm 2>&1 | tail -1
+# vLLM needs its own venv (torch version conflicts with training)
+VLLM_VENV=".venv-vllm"
+if [ ! -f "$VLLM_VENV/bin/vllm" ]; then
+    echo "$(date) | Creating vLLM venv..."
+    uv venv "$VLLM_VENV" --python 3.10 2>&1
+    echo "$(date) | Installing vLLM (this takes a few minutes)..."
+    VIRTUAL_ENV="$VLLM_VENV" uv pip install vllm 2>&1 | tail -3
+fi
 echo "$(date) | Starting vLLM server on GPU 0-6 (TP=7)..."
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 uv run vllm serve Qwen/Qwen3.5-35B-A3B \
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 "$VLLM_VENV/bin/vllm" serve Qwen/Qwen3.5-35B-A3B \
     --tensor-parallel-size 7 \
     --max-model-len 32768 \
     --host 0.0.0.0 \
