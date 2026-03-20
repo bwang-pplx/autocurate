@@ -132,8 +132,9 @@ def get_peek_config(iteration):
 # Sampling
 # ---------------------------------------------------------------------------
 
-def sample_documents(lang, n, from_filtered=False, seed=None):
-    """Sample n documents using reservoir sampling."""
+def sample_documents_multi(lang, n_batches, n_per_batch, from_filtered=False, base_seed=0):
+    """Sample multiple batches in ONE pass through the data.
+    Returns list of lists: batches[i] = list of n_per_batch docs."""
     lang_dir = get_lang_dir(lang)
 
     if from_filtered:
@@ -151,8 +152,9 @@ def sample_documents(lang, n, from_filtered=False, seed=None):
         print("No raw data found. Run prepare_data.py --phase download first.")
         return []
 
-    rng = random.Random(seed)
-    reservoir = []
+    # One RNG + reservoir per batch
+    rngs = [random.Random(base_seed + i) for i in range(n_batches)]
+    reservoirs = [[] for _ in range(n_batches)]
     seen = 0
     t0 = time.time()
 
@@ -168,19 +170,21 @@ def sample_documents(lang, n, from_filtered=False, seed=None):
                 if selected_ids is not None and doc_id not in selected_ids:
                     continue
                 seen += 1
-                if len(reservoir) < n:
-                    reservoir.append({"doc_id": doc_id, "text": text, "url": url})
-                else:
-                    j = rng.randint(0, seen - 1)
-                    if j < n:
-                        reservoir[j] = {"doc_id": doc_id, "text": text, "url": url}
+                doc = {"doc_id": doc_id, "text": text, "url": url}
+                for b in range(n_batches):
+                    if len(reservoirs[b]) < n_per_batch:
+                        reservoirs[b].append(doc.copy())
+                    else:
+                        j = rngs[b].randint(0, seen - 1)
+                        if j < n_per_batch:
+                            reservoirs[b][j] = doc.copy()
 
         elapsed = time.time() - t0
         pct = 100 * (fi + 1) / len(parquet_files)
         print(f"\r  Sampling: file {fi+1}/{len(parquet_files)} ({pct:.0f}%), {seen:,} docs seen, {elapsed:.0f}s", end="", flush=True)
 
-    print(f"\r  Sampling done: {seen:,} docs in {time.time()-t0:.0f}s" + " " * 20)
-    return reservoir
+    print(f"\r  Sampling done: {n_batches} batches × {n_per_batch} docs from {seen:,} total in {time.time()-t0:.0f}s" + " " * 20)
+    return reservoirs
 
 
 MAX_PROMPT_CHARS = 80_000  # ~20K tokens, safe for 32K context with response room
@@ -451,18 +455,24 @@ if __name__ == "__main__":
     focus_instruction = f"Focus your analysis specifically on: {args.focus}" if args.focus else ""
 
     # ---------------------------------------------------------------
-    # Phase 1: Observe — peek multiple times, accumulate observations
+    # Phase 1: Sample all batches in one pass, then observe
     # ---------------------------------------------------------------
+
+    print("Sampling all batches in one pass...")
+    batches = sample_documents_multi(
+        args.lang, n_batches=n_peeks, n_per_batch=docs_per_peek,
+        from_filtered=args.from_filtered, base_seed=base_seed,
+    )
+    if not batches:
+        print("No documents sampled.")
+        exit(1)
 
     all_observations = []
     all_docs = []
 
-    for peek_idx in range(n_peeks):
-        seed = base_seed + peek_idx
-        docs = sample_documents(args.lang, n=docs_per_peek,
-                                from_filtered=args.from_filtered, seed=seed)
+    for peek_idx, docs in enumerate(batches):
         if not docs:
-            print(f"Peek {peek_idx+1}: no docs sampled, skipping")
+            print(f"Peek {peek_idx+1}: empty batch, skipping")
             continue
 
         all_docs.extend(docs)
@@ -475,7 +485,7 @@ if __name__ == "__main__":
             focus_instruction=focus_instruction,
         )
 
-        print(f"Peek {peek_idx+1}/{n_peeks} ({len(docs)} docs, seed={seed})... ", end="", flush=True)
+        print(f"Peek {peek_idx+1}/{n_peeks} ({len(docs)} docs)... ", end="", flush=True)
         t0 = time.time()
         observation = query_qwen(prompt)
         elapsed = time.time() - t0
