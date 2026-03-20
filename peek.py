@@ -133,8 +133,8 @@ def get_peek_config(iteration):
 # ---------------------------------------------------------------------------
 
 def sample_documents_multi(lang, n_batches, n_per_batch, from_filtered=False, base_seed=0):
-    """Sample multiple batches in ONE pass through the data.
-    Returns list of lists: batches[i] = list of n_per_batch docs."""
+    """Sample multiple batches by picking random files and random row groups.
+    Fast — reads only what's needed, not the entire dataset."""
     lang_dir = get_lang_dir(lang)
 
     if from_filtered:
@@ -152,15 +152,22 @@ def sample_documents_multi(lang, n_batches, n_per_batch, from_filtered=False, ba
         print("No raw data found. Run prepare_data.py --phase download first.")
         return []
 
-    # One RNG + reservoir per batch
-    rngs = [random.Random(base_seed + i) for i in range(n_batches)]
-    reservoirs = [[] for _ in range(n_batches)]
-    seen = 0
+    rng = random.Random(base_seed)
+    total_needed = n_batches * n_per_batch
+    all_docs = []
     t0 = time.time()
 
-    for fi, filepath in enumerate(parquet_files):
+    # Pick random files, read random row groups until we have enough
+    file_indices = list(range(len(parquet_files)))
+    rng.shuffle(file_indices)
+
+    for fi in file_indices:
+        filepath = parquet_files[fi]
         pf = pq.ParquetFile(filepath)
-        for rg_idx in range(pf.num_row_groups):
+        rg_indices = list(range(pf.num_row_groups))
+        rng.shuffle(rg_indices)
+
+        for rg_idx in rg_indices:
             rg = pf.read_row_group(rg_idx)
             texts = rg.column("text").to_pylist()
             ids = rg.column("id").to_pylist()
@@ -169,22 +176,26 @@ def sample_documents_multi(lang, n_batches, n_per_batch, from_filtered=False, ba
             for doc_id, text, url in zip(ids, texts, urls):
                 if selected_ids is not None and doc_id not in selected_ids:
                     continue
-                seen += 1
-                doc = {"doc_id": doc_id, "text": text, "url": url}
-                for b in range(n_batches):
-                    if len(reservoirs[b]) < n_per_batch:
-                        reservoirs[b].append(doc.copy())
-                    else:
-                        j = rngs[b].randint(0, seen - 1)
-                        if j < n_per_batch:
-                            reservoirs[b][j] = doc.copy()
+                all_docs.append({"doc_id": doc_id, "text": text, "url": url})
 
-        elapsed = time.time() - t0
-        pct = 100 * (fi + 1) / len(parquet_files)
-        print(f"\r  Sampling: file {fi+1}/{len(parquet_files)} ({pct:.0f}%), {seen:,} docs seen, {elapsed:.0f}s", end="", flush=True)
+            print(f"\r  Sampling: {len(all_docs):,} docs collected ({total_needed:,} needed), {time.time()-t0:.0f}s", end="", flush=True)
 
-    print(f"\r  Sampling done: {n_batches} batches × {n_per_batch} docs from {seen:,} total in {time.time()-t0:.0f}s" + " " * 20)
-    return reservoirs
+            if len(all_docs) >= total_needed * 3:
+                break
+        if len(all_docs) >= total_needed * 3:
+            break
+
+    # Shuffle and split into batches
+    rng.shuffle(all_docs)
+    batches = []
+    for b in range(n_batches):
+        start = b * n_per_batch
+        end = start + n_per_batch
+        batches.append(all_docs[start:end])
+
+    elapsed = time.time() - t0
+    print(f"\r  Sampling done: {n_batches} batches × {n_per_batch} docs in {elapsed:.0f}s" + " " * 20)
+    return batches
 
 
 MAX_PROMPT_CHARS = 80_000  # ~20K tokens, safe for 32K context with response room
