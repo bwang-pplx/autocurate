@@ -9,7 +9,7 @@
 #SBATCH --mem=0
 
 # 8 GPUs on one node:
-#   GPU 0-6: vLLM server (Qwen3.5-35B-A3B, TP=7 for fast inference)
+#   GPU 0-3: vLLM server (Qwen3.5-35B-A3B, TP=4)
 #   GPU 7:   training (train_data.py)
 
 LANG="${1:-dan_Latn}"
@@ -41,9 +41,9 @@ if [ ! -f "$VLLM_VENV/bin/vllm" ]; then
     echo "$(date) | Installing vLLM (this takes a few minutes)..."
     VIRTUAL_ENV="$VLLM_VENV" uv pip install vllm 2>&1 | tail -3
 fi
-echo "$(date) | Starting vLLM server on GPU 0-6 (TP=7)..."
-CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 "$VLLM_VENV/bin/vllm" serve Qwen/Qwen3.5-35B-A3B \
-    --tensor-parallel-size 7 \
+echo "$(date) | Starting vLLM server on GPU 0-3 (TP=4)..."
+CUDA_VISIBLE_DEVICES=0,1,2,3 "$VLLM_VENV/bin/vllm" serve Qwen/Qwen3.5-35B-A3B \
+    --tensor-parallel-size 4 \
     --max-model-len 32768 \
     --host 0.0.0.0 \
     --port 8000 \
