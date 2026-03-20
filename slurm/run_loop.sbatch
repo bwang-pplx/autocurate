@@ -3,13 +3,13 @@
 #SBATCH --output=logs/loop_%j.out
 #SBATCH --error=logs/loop_%j.err
 #SBATCH --time=24:00:00
-#SBATCH --gpus=2
-#SBATCH --cpus-per-task=16
-#SBATCH --mem=128G
+#SBATCH --gpus=8
+#SBATCH --cpus-per-task=64
+#SBATCH --mem=0
 
-# Uses 2 GPUs on the SAME node:
-#   GPU 0: vLLM server (Qwen3.5-35B-A3B)
-#   GPU 1: training (train_data.py)
+# 8 GPUs on one node:
+#   GPU 0-6: vLLM server (Qwen3.5-35B-A3B, TP=7 for fast inference)
+#   GPU 7:   training (train_data.py)
 
 LANG="${1:-dan_Latn}"
 MAX_ITERATIONS="${2:-100}"
@@ -28,9 +28,9 @@ echo ""
 # Start vLLM server on GPU 0
 # ---------------------------------------------------------------------------
 
-echo "$(date) | Starting vLLM server on GPU 0..."
-CUDA_VISIBLE_DEVICES=0 vllm serve Qwen/Qwen3.5-35B-A3B \
-    --tensor-parallel-size 1 \
+echo "$(date) | Starting vLLM server on GPU 0-6 (TP=7)..."
+CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6 vllm serve Qwen/Qwen3.5-35B-A3B \
+    --tensor-parallel-size 7 \
     --max-model-len 32768 \
     --host 0.0.0.0 \
     --port 8000 \
@@ -61,8 +61,8 @@ fi
 export VLLM_URL="http://localhost:8000/v1/chat/completions"
 export JUDGE_MODEL="Qwen/Qwen3.5-35B-A3B"
 
-# Training uses GPU 1
-export CUDA_VISIBLE_DEVICES=1
+# Training uses GPU 7
+export CUDA_VISIBLE_DEVICES=7
 
 # Cleanup vLLM on exit
 trap "kill $VLLM_PID 2>/dev/null; wait $VLLM_PID 2>/dev/null" EXIT
@@ -167,7 +167,7 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
 
     # Step 4: Train
     echo "$(date) | [iter $ITER] Training..."
-    CUDA_VISIBLE_DEVICES=1 uv run train_data.py --lang "$LANG" > run.log 2>&1
+    CUDA_VISIBLE_DEVICES=7 uv run train_data.py --lang "$LANG" > run.log 2>&1
 
     # Step 5: Read results
     VAL_BPB=$(grep "^val_bpb:" run.log | awk '{print $2}')
