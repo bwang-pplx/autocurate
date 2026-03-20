@@ -103,6 +103,10 @@ fi
 # ---------------------------------------------------------------------------
 
 echo ""
+# Ensure tokenizer exists
+echo "$(date) | Setting up tokenizer..."
+PYTHONUNBUFFERED=1 uv run setup_tokenizer.py 2>&1
+
 echo "$(date) | === Baseline (no filter) ==="
 
 # Select all docs except eval set
