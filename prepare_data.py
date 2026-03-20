@@ -174,48 +174,40 @@ def build_eval_set(lang, n_eval_docs=10000):
 
 def _download_wiki_eval(wiki_lang, n_docs):
     """Download Wikipedia articles via HuggingFace wikimedia/wikipedia dataset."""
-    from huggingface_hub import hf_hub_download
+    from huggingface_hub import HfApi, hf_hub_download
     import random
 
-    # wikimedia/wikipedia is organized as "20231101.{lang}"
+    # wikimedia/wikipedia stores files at 20231101.{lang}/train-*.parquet
     config = f"20231101.{wiki_lang}"
     eval_dir_tmp = os.path.join(CACHE_DIR, "_wiki_tmp")
     os.makedirs(eval_dir_tmp, exist_ok=True)
 
+    # List train parquet files
     try:
-        # Download first train parquet shard
-        dl_path = hf_hub_download(
-            repo_id="wikimedia/wikipedia",
-            filename=f"data/{config}/train-00000-of-*.parquet",
+        api = HfApi()
+        files = list(api.list_repo_tree(
+            "wikimedia/wikipedia",
+            path_in_repo=config,
             repo_type="dataset",
-            local_dir=eval_dir_tmp,
-            local_dir_use_symlinks=False,
-        )
-    except Exception:
-        # Filename pattern varies; list files and grab the first train shard
-        try:
-            from huggingface_hub import HfApi
-            api = HfApi()
-            files = list(api.list_repo_tree(
-                "wikimedia/wikipedia",
-                path_in_repo=f"data/{config}",
-                repo_type="dataset",
-            ))
-            train_files = [f for f in files if hasattr(f, 'path')
-                          and 'train' in f.path and f.path.endswith('.parquet')]
-            if not train_files:
-                print(f"  No Wikipedia train files found for {config}")
-                return [], []
-            dl_path = hf_hub_download(
-                repo_id="wikimedia/wikipedia",
-                filename=train_files[0].path,
-                repo_type="dataset",
-                local_dir=eval_dir_tmp,
-                local_dir_use_symlinks=False,
-            )
-        except Exception as e:
-            print(f"  Wikipedia download failed: {e}")
-            return [], []
+        ))
+        train_files = [f for f in files if hasattr(f, 'path')
+                      and 'train' in f.path and f.path.endswith('.parquet')]
+    except Exception as e:
+        print(f"  Wikipedia listing failed: {e}")
+        return [], []
+
+    if not train_files:
+        print(f"  No Wikipedia train files found for {config}")
+        return [], []
+
+    # Download first shard (enough for 10K articles)
+    print(f"  Downloading {train_files[0].path}...")
+    dl_path = hf_hub_download(
+        repo_id="wikimedia/wikipedia",
+        filename=train_files[0].path,
+        repo_type="dataset",
+        local_dir=eval_dir_tmp,
+    )
 
     print(f"  Reading Wikipedia articles...")
     pf = pq.ParquetFile(dl_path)
@@ -224,16 +216,11 @@ def _download_wiki_eval(wiki_lang, n_docs):
     for rg_idx in range(pf.num_row_groups):
         rg = pf.read_row_group(rg_idx)
         texts = rg.column("text").to_pylist()
-        ids = rg.column("id").to_pylist() if "id" in rg.schema.names else [f"wiki_{i}" for i in range(len(texts))]
-        for text, doc_id in zip(ids, texts):
-            # doc_id is the wiki id, text is the article text
-            # swap: text is in the `text` column, id in `id`
-            pass
+        ids = rg.column("id").to_pylist() if "id" in rg.schema.names else [f"wiki_{rg_idx}_{i}" for i in range(len(texts))]
         for i, text in enumerate(texts):
-            doc_id = str(ids[i]) if i < len(ids) else f"wiki_{rg_idx}_{i}"
             if 500 <= len(text) <= 50000:
                 all_texts.append(text)
-                all_ids.append(f"wiki_{doc_id}")
+                all_ids.append(f"wiki_{ids[i]}")
 
     # Random subsample
     if len(all_texts) > n_docs:
