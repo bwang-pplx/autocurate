@@ -126,8 +126,21 @@ def download_language(lang, max_docs=None):
 # Phase 2: Build eval set
 # ---------------------------------------------------------------------------
 
+WIKI_LANG_MAP = {
+    "dan_Latn": "da", "deu_Latn": "de", "fra_Latn": "fr", "spa_Latn": "es",
+    "ita_Latn": "it", "por_Latn": "pt", "nld_Latn": "nl", "swe_Latn": "sv",
+    "pol_Latn": "pl", "tur_Latn": "tr", "vie_Latn": "vi", "ind_Latn": "id",
+    "ron_Latn": "ro", "ces_Latn": "cs", "hun_Latn": "hu", "fin_Latn": "fi",
+    "nob_Latn": "no", "kor_Hang": "ko", "zho_Hans": "zh",
+    "rus_Cyrl": "ru", "ukr_Cyrl": "uk", "bul_Cyrl": "bg",
+    "arb_Arab": "ar", "fas_Arab": "fa", "jpn_Jpan": "ja",
+    "tha_Thai": "th", "ell_Grek": "el", "heb_Hebr": "he",
+    "hin_Deva": "hi", "ben_Beng": "bn",
+}
+
+
 def build_eval_set(lang, n_eval_docs=10000):
-    """Build a fixed eval set. Sampled from tail of raw data, never changes."""
+    """Build a fixed eval set from Wikipedia for the target language."""
     eval_dir = get_eval_dir(lang)
     eval_path = os.path.join(eval_dir, "eval.parquet")
     if os.path.exists(eval_path):
@@ -136,14 +149,111 @@ def build_eval_set(lang, n_eval_docs=10000):
 
     os.makedirs(eval_dir, exist_ok=True)
 
-    parquet_files = list_raw_parquet_files(lang)
-    if not parquet_files:
-        print("No raw data found. Run download first.")
+    wiki_lang = WIKI_LANG_MAP.get(lang)
+    if wiki_lang:
+        print(f"Downloading Wikipedia eval set ({wiki_lang})...")
+        eval_texts, eval_ids = _download_wiki_eval(wiki_lang, n_eval_docs)
+    else:
+        print(f"No Wikipedia mapping for {lang}, falling back to raw data sample")
+        eval_texts, eval_ids = _sample_raw_eval(lang, n_eval_docs)
+
+    if not eval_texts:
+        print("ERROR: Could not build eval set.")
         return
 
-    # Take from the LAST file to minimize overlap with training
+    import pandas as pd
+    df = pd.DataFrame({"doc_id": eval_ids, "text": eval_texts})
+    df.to_parquet(eval_path, index=False)
+    print(f"Eval set: {len(eval_texts):,} docs saved to {eval_path}")
+
+    eval_ids_path = os.path.join(eval_dir, "eval_doc_ids.json")
+    with open(eval_ids_path, "w") as f:
+        json.dump(eval_ids, f)
+    print(f"Eval doc IDs saved to {eval_ids_path}")
+
+
+def _download_wiki_eval(wiki_lang, n_docs):
+    """Download Wikipedia articles via HuggingFace wikimedia/wikipedia dataset."""
+    from huggingface_hub import hf_hub_download
+    import random
+
+    # wikimedia/wikipedia is organized as "20231101.{lang}"
+    config = f"20231101.{wiki_lang}"
+    eval_dir_tmp = os.path.join(CACHE_DIR, "_wiki_tmp")
+    os.makedirs(eval_dir_tmp, exist_ok=True)
+
+    try:
+        # Download first train parquet shard
+        dl_path = hf_hub_download(
+            repo_id="wikimedia/wikipedia",
+            filename=f"data/{config}/train-00000-of-*.parquet",
+            repo_type="dataset",
+            local_dir=eval_dir_tmp,
+            local_dir_use_symlinks=False,
+        )
+    except Exception:
+        # Filename pattern varies; list files and grab the first train shard
+        try:
+            from huggingface_hub import HfApi
+            api = HfApi()
+            files = list(api.list_repo_tree(
+                "wikimedia/wikipedia",
+                path_in_repo=f"data/{config}",
+                repo_type="dataset",
+            ))
+            train_files = [f for f in files if hasattr(f, 'path')
+                          and 'train' in f.path and f.path.endswith('.parquet')]
+            if not train_files:
+                print(f"  No Wikipedia train files found for {config}")
+                return [], []
+            dl_path = hf_hub_download(
+                repo_id="wikimedia/wikipedia",
+                filename=train_files[0].path,
+                repo_type="dataset",
+                local_dir=eval_dir_tmp,
+                local_dir_use_symlinks=False,
+            )
+        except Exception as e:
+            print(f"  Wikipedia download failed: {e}")
+            return [], []
+
+    print(f"  Reading Wikipedia articles...")
+    pf = pq.ParquetFile(dl_path)
+    all_texts = []
+    all_ids = []
+    for rg_idx in range(pf.num_row_groups):
+        rg = pf.read_row_group(rg_idx)
+        texts = rg.column("text").to_pylist()
+        ids = rg.column("id").to_pylist() if "id" in rg.schema.names else [f"wiki_{i}" for i in range(len(texts))]
+        for text, doc_id in zip(ids, texts):
+            # doc_id is the wiki id, text is the article text
+            # swap: text is in the `text` column, id in `id`
+            pass
+        for i, text in enumerate(texts):
+            doc_id = str(ids[i]) if i < len(ids) else f"wiki_{rg_idx}_{i}"
+            if 500 <= len(text) <= 50000:
+                all_texts.append(text)
+                all_ids.append(f"wiki_{doc_id}")
+
+    # Random subsample
+    if len(all_texts) > n_docs:
+        random.seed(42)
+        indices = random.sample(range(len(all_texts)), n_docs)
+        all_texts = [all_texts[i] for i in indices]
+        all_ids = [all_ids[i] for i in indices]
+
+    print(f"  Got {len(all_texts):,} Wikipedia articles (from {pf.metadata.num_rows:,} total)")
+    return all_texts, all_ids
+
+
+def _sample_raw_eval(lang, n_docs):
+    """Fallback: sample from tail of raw fineweb-2 data."""
+    parquet_files = list_raw_parquet_files(lang)
+    if not parquet_files:
+        return [], []
+
     last_file = parquet_files[-1]
-    print(f"Building eval set from {os.path.basename(last_file)}...")
+    print(f"  Sampling from {os.path.basename(last_file)}...")
     pf = pq.ParquetFile(last_file)
 
     eval_texts = []
@@ -156,20 +266,12 @@ def build_eval_set(lang, n_eval_docs=10000):
             if 500 <= len(text) <= 50000:
                 eval_texts.append(text)
                 eval_ids.append(doc_id)
-                if len(eval_texts) >= n_eval_docs:
+                if len(eval_texts) >= n_docs:
                     break
-        if len(eval_texts) >= n_eval_docs:
+        if len(eval_texts) >= n_docs:
             break
 
-    import pandas as pd
-    df = pd.DataFrame({"doc_id": eval_ids, "text": eval_texts})
-    df.to_parquet(eval_path, index=False)
-    print(f"Eval set: {len(eval_texts):,} docs saved to {eval_path}")
-
-    eval_ids_path = os.path.join(eval_dir, "eval_doc_ids.json")
-    with open(eval_ids_path, "w") as f:
-        json.dump(eval_ids, f)
-    print(f"Eval doc IDs saved to {eval_ids_path}")
+    return eval_texts, eval_ids
 
 # ---------------------------------------------------------------------------
 # Runtime: Dataloader that applies clean+filter on the fly
