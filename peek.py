@@ -223,13 +223,22 @@ def query_qwen(prompt):
             "messages": [{"role": "user", "content": prompt}],
             "max_tokens": 2048,
             "temperature": 0.7,
+            "chat_template_kwargs": {"enable_thinking": False},
         },
         timeout=300,
     )
     if response.status_code != 200:
         print(f"  vLLM error {response.status_code}: {response.text[:500]}", flush=True)
         response.raise_for_status()
-    return response.json()["choices"][0]["message"]["content"]
+
+    content = response.json()["choices"][0]["message"]["content"]
+
+    # Strip thinking block if Qwen still outputs one
+    if "<think>" in content:
+        import re
+        content = re.sub(r'<think>.*?</think>\s*', '', content, flags=re.DOTALL)
+
+    return content
 
 # ---------------------------------------------------------------------------
 # Parse and apply fix
