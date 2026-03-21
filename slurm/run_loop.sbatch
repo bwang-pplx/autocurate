@@ -18,13 +18,6 @@ LANG_CODE=$(echo "$LANG" | cut -d'_' -f1)
 
 mkdir -p logs
 
-# Each language gets its own branch to avoid git conflicts
-BRANCH="data-quality-${LANG_CODE}"
-CURRENT=$(git branch --show-current)
-if [ "$CURRENT" != "$BRANCH" ]; then
-    git checkout -b "$BRANCH" 2>/dev/null || git checkout "$BRANCH"
-fi
-
 echo "$(date) | Installing dependencies..."
 uv sync 2>&1
 echo "$(date) | Dependencies ready."
