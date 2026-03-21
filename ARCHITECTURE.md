@@ -1,6 +1,6 @@
 ```mermaid
 flowchart LR
-    A["Sample docs"] --> B["Qwen: what's wrong?"]
+    A["Sample docs"] --> B["LLM Peek:<br/>what's wrong?"]
     B --> C["Propose fix"]
     C --> D["Filter docs"]
     D --> E["Train 5 min"]
