@@ -93,7 +93,7 @@ trap "kill $VLLM_PID 2>/dev/null; wait $VLLM_PID 2>/dev/null" EXIT
 # Create results TSV
 # ---------------------------------------------------------------------------
 
-RESULTS="results.tsv"
+RESULTS="results_${LANG_CODE}.tsv"
 if [ ! -f "$RESULTS" ]; then
     printf "commit\tval_bpb\tmemory_gb\tstatus\tdescription\n" > "$RESULTS"
 fi
@@ -137,13 +137,13 @@ json.dump(all_ids, open(out, 'w'))
 print(f'Baseline: {len(all_ids):,} docs selected')
 "
 
-uv run train_data.py --lang "$LANG" > run.log 2>&1
-BASELINE_BPB=$(grep "^val_bpb:" run.log | awk '{print $2}')
-BASELINE_MEM=$(grep "^peak_vram_mb:" run.log | awk '{print $2}')
+uv run train_data.py --lang "$LANG" > run_${LANG_CODE}.log 2>&1
+BASELINE_BPB=$(grep "^val_bpb:" run_${LANG_CODE}.log | awk '{print $2}')
+BASELINE_MEM=$(grep "^peak_vram_mb:" run_${LANG_CODE}.log | awk '{print $2}')
 
 if [ -z "$BASELINE_BPB" ]; then
     echo "$(date) | ERROR: Baseline training failed!"
-    tail -20 run.log
+    tail -20 run_${LANG_CODE}.log
     exit 1
 fi
 
@@ -173,18 +173,18 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
 
     echo "$(date) | [iter $ITER] Peeking..."
     # peek.py uses CPU only (Qwen is on GPU 0 via vLLM)
-    CUDA_VISIBLE_DEVICES="" uv run peek.py $PEEK_ARGS > "logs/peek_iter${ITER}.log" 2>&1
+    CUDA_VISIBLE_DEVICES="" uv run peek.py $PEEK_ARGS > "logs/peek_${LANG_CODE}_iter${ITER}.log" 2>&1
     PEEK_EXIT=$?
 
     if [ $PEEK_EXIT -ne 0 ]; then
         echo "$(date) | [iter $ITER] Peek failed (exit $PEEK_EXIT), skipping"
-        tail -5 "logs/peek_iter${ITER}.log"
+        tail -5 "logs/peek_${LANG_CODE}_iter${ITER}.log"
         continue
     fi
 
     # Step 2: Commit
     if ! git diff --quiet "filter_${LANG_CODE}.py" 2>/dev/null; then
-        DESCRIPTION=$(grep "^Problem:" "logs/peek_iter${ITER}.log" | head -1 | cut -c10-80)
+        DESCRIPTION=$(grep "^Problem:" "logs/peek_${LANG_CODE}_iter${ITER}.log" | head -1 | cut -c10-80)
         [ -z "$DESCRIPTION" ] && DESCRIPTION="iteration $ITER"
         git add "filter_${LANG_CODE}.py"
         git commit -m "iter $ITER: $DESCRIPTION" --no-verify 2>/dev/null || true
@@ -200,15 +200,15 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
 
     # Step 4: Train
     echo "$(date) | [iter $ITER] Training..."
-    CUDA_VISIBLE_DEVICES=7 uv run train_data.py --lang "$LANG" > run.log 2>&1
+    CUDA_VISIBLE_DEVICES=7 uv run train_data.py --lang "$LANG" > run_${LANG_CODE}.log 2>&1
 
     # Step 5: Read results
-    VAL_BPB=$(grep "^val_bpb:" run.log | awk '{print $2}')
-    PEAK_MEM=$(grep "^peak_vram_mb:" run.log | awk '{print $2}')
+    VAL_BPB=$(grep "^val_bpb:" run_${LANG_CODE}.log | awk '{print $2}')
+    PEAK_MEM=$(grep "^peak_vram_mb:" run_${LANG_CODE}.log | awk '{print $2}')
 
     if [ -z "$VAL_BPB" ]; then
         echo "$(date) | [iter $ITER] Training crashed!"
-        tail -10 run.log
+        tail -10 run_${LANG_CODE}.log
         printf "%s\t0.000000\t0.0\tcrash\t%s\n" "$COMMIT" "$DESCRIPTION" >> "$RESULTS"
         git revert --no-edit HEAD 2>/dev/null || git reset --hard HEAD~1
         continue
@@ -234,7 +234,7 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
     # Log full details to history
     FUNC_CODE=$(python3 -c "
 import json, re
-log = open('logs/peek_iter${ITER}.log').read()
+log = open('logs/peek_${LANG_CODE}_iter${ITER}.log').read()
 # Extract the function code from the log
 m = re.search(r'## Function\s*\n\`\`\`python\s*\n(.*?)\`\`\`', log, re.DOTALL)
 code = m.group(1).strip() if m else ''
@@ -249,7 +249,7 @@ print(json.dumps({
     'timestamp': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
 }))
 " 2>/dev/null)
-    [ -n "$FUNC_CODE" ] && echo "$FUNC_CODE" >> peek_history.jsonl
+    [ -n "$FUNC_CODE" ] && echo "$FUNC_CODE" >> peek_history_${LANG_CODE}.jsonl
 done
 
 echo ""
