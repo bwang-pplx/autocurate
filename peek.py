@@ -28,7 +28,7 @@ from prepare_data import get_lang_dir, list_raw_parquet_files
 # Constants
 # ---------------------------------------------------------------------------
 
-JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "Qwen/Qwen3.5-122B-A10B-FP8")
+JUDGE_MODEL = os.environ.get("JUDGE_MODEL", "Qwen/Qwen3.5-35B-A3B")
 VLLM_URL = os.environ.get("VLLM_URL", "http://localhost:8000/v1/chat/completions")
 
 LANG_NAMES = {
