@@ -13,7 +13,7 @@ Usage:
     python export.py --lang dan_Latn --push                   # export + push to HF
     python export.py --lang dan_Latn --push --repo bwang-pplx/fineweb-2-autocurate
 
-NOTE: Run `python prepare_data.py --lang dan_Latn` WITHOUT --max-docs first
+NOTE: Run `python prepare.py --lang dan_Latn` WITHOUT --max-docs first
       to download the full dataset for export.
 """
 
@@ -26,7 +26,7 @@ import time
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from prepare_data import get_lang_dir, get_eval_dir, list_raw_parquet_files
+from prepare import get_lang_dir, get_eval_dir, list_raw_parquet_files
 
 HF_REPO = "bwang-pplx/fineweb-2-autocurate"
 EXPORT_DIR = "export"

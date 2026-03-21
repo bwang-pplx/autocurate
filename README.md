@@ -90,7 +90,7 @@ When iterations plateau, export the cleaned dataset to HuggingFace:
 
 ```bash
 # Download full dataset first (loop only downloads 10M docs)
-uv run prepare_data.py --lang dan_Latn
+uv run prepare.py --lang dan_Latn
 
 # Export and push
 uv run export.py --lang dan_Latn --push
@@ -106,8 +106,8 @@ Output preserves fineweb-2's structure: `data/{lang}/train/*.parquet`
 | `filter_{lang}.py` | Auto-growing pipeline of cleaners + filters (per language) |
 | `filter.py` | Dispatcher: imports the right `filter_{lang}.py` |
 | `templates.py` | Pre-built, tested filter templates |
-| `prepare_data.py` | Download fineweb-2 + Wikipedia eval set + tokenizer + dataloader |
-| `train_data.py` | Frozen GPT model + training loop |
+| `prepare.py` | Download fineweb-2 + Wikipedia eval set + tokenizer + dataloader |
+| `train.py` | Frozen GPT model + training loop |
 | `setup_tokenizer.py` | Train 8K BPE tokenizer on target language |
 | `export.py` | Apply all rules to full dataset, push to HuggingFace |
 | `new_lang.sh` | Bootstrap a new language in one command |

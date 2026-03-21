@@ -10,7 +10,7 @@
 
 # 8 GPUs on one node:
 #   GPU 0-3: vLLM server (Qwen3.5-35B-A3B, TP=4)
-#   GPU 7:   training (train_data.py)
+#   GPU 7:   training (train.py)
 
 LANG="${1:-dan_Latn}"
 MAX_ITERATIONS="${2:-100}"
@@ -119,7 +119,7 @@ echo "$(date) | === Baseline (no filter) ==="
 uv run python3 -c "
 import json, os
 import pyarrow.parquet as pq
-from prepare_data import list_raw_parquet_files, get_lang_dir, get_eval_dir
+from prepare import list_raw_parquet_files, get_lang_dir, get_eval_dir
 lang = '$LANG'
 eval_ids = set()
 ep = os.path.join(get_eval_dir(lang), 'eval_doc_ids.json')
@@ -143,7 +143,7 @@ json.dump(all_ids, open(out, 'w'))
 print(f'Baseline: {len(all_ids):,} docs selected')
 "
 
-PYTHONUNBUFFERED=1 uv run train_data.py --lang "$LANG" 2>&1 | tee /tmp/train_${LANG_CODE}.log
+PYTHONUNBUFFERED=1 uv run train.py --lang "$LANG" 2>&1 | tee /tmp/train_${LANG_CODE}.log
 BASELINE_BPB=$(grep "^val_bpb:" /tmp/train_${LANG_CODE}.log | awk '{print $2}')
 BASELINE_MEM=$(grep "^peak_vram_mb:" /tmp/train_${LANG_CODE}.log | awk '{print $2}')
 
@@ -204,7 +204,7 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
 
     # Step 4: Train
     echo "$(date) | [iter $ITER] Training..."
-    CUDA_VISIBLE_DEVICES=7 PYTHONUNBUFFERED=1 uv run train_data.py --lang "$LANG" 2>&1 | tee /tmp/train_${LANG_CODE}.log
+    CUDA_VISIBLE_DEVICES=7 PYTHONUNBUFFERED=1 uv run train.py --lang "$LANG" 2>&1 | tee /tmp/train_${LANG_CODE}.log
 
     # Step 5: Read results
     VAL_BPB=$(grep "^val_bpb:" /tmp/train_${LANG_CODE}.log | awk '{print $2}')

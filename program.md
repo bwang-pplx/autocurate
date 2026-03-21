@@ -12,12 +12,12 @@ the fixes are automatically applied to a per-language filter pipeline.
    - `filter_dan.py` — the auto-growing pipeline for Danish. DO NOT edit manually.
    - `peek.py` — samples docs, queries Qwen, appends fix to filter_dan.py.
    - `filter.py` — dispatcher that imports the right filter_{lang}.py.
-   - `prepare_data.py` — fixed data download and dataloaders. Do not modify.
-   - `train_data.py` — frozen model + training. Do not modify.
+   - `prepare.py` — fixed data download and dataloaders. Do not modify.
+   - `train.py` — frozen model + training. Do not modify.
 4. **Verify data exists**: `~/.cache/autoresearch-data/dan_Latn/` must have:
    - `raw/` — fineweb-2 parquet files
    - `eval/` — held-out evaluation set
-   If not: `uv run prepare_data.py --lang dan_Latn`.
+   If not: `uv run prepare.py --lang dan_Latn`.
 5. **Start vLLM server** for Qwen:
    ```
    vllm serve Qwen/Qwen3.5-35B-A3B --tensor-parallel-size 1
@@ -40,7 +40,7 @@ LOOP FOREVER:
    - Applies the full pipeline (all cleaners + all filters)
    - Note: total docs, kept %, cleaned %
 
-4. **Train**: `uv run train_data.py --lang dan_Latn > run.log 2>&1`
+4. **Train**: `uv run train.py --lang dan_Latn > run.log 2>&1`
 
 5. **Read results**: `grep "^val_bpb:\|^peak_vram_mb:" run.log`
 

@@ -2,7 +2,7 @@
 Training script for data-quality autoresearch. Frozen model + optimizer.
 Trains on filtered data from filter.py, evaluates on fixed eval set.
 
-Usage: uv run train_data.py [--lang dan_Latn]
+Usage: uv run train.py [--lang dan_Latn]
 
 DO NOT MODIFY THIS FILE — modify filter.py instead.
 """
@@ -26,7 +26,7 @@ cap = torch.cuda.get_device_capability()
 repo = "varunneal/flash-attention-3" if cap == (9, 0) else "kernels-community/flash-attn3"
 fa3 = get_kernel(repo).flash_attn_interface
 
-from prepare_data import (
+from prepare import (
     MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, get_token_bytes,
     make_filtered_dataloader, make_eval_dataloader,
 )

@@ -3,11 +3,11 @@ Data preparation for data-quality autoresearch experiments.
 Downloads fineweb-2 for a target language and builds a fixed eval set.
 
 Usage:
-    python prepare_data.py                          # full prep for Danish
-    python prepare_data.py --lang zho_Hans          # different language
-    python prepare_data.py --max-docs 100000        # small test run
-    python prepare_data.py --phase download         # only download
-    python prepare_data.py --phase eval             # only build eval set
+    python prepare.py                          # full prep for Danish
+    python prepare.py --lang zho_Hans          # different language
+    python prepare.py --max-docs 100000        # small test run
+    python prepare.py --phase download         # only download
+    python prepare.py --phase eval             # only build eval set
 
 Data is stored in ~/.cache/autoresearch-data/<lang>/.
 """

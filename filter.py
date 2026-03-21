@@ -13,7 +13,7 @@ import importlib
 
 import pyarrow.parquet as pq
 
-from prepare_data import get_lang_dir, get_eval_dir, list_raw_parquet_files
+from prepare import get_lang_dir, get_eval_dir, list_raw_parquet_files
 
 
 def load_lang_filter(lang):
@@ -38,7 +38,7 @@ def apply_pipeline(lang, preview=0, max_kept=MAX_KEPT_DOCS):
     parquet_files = list_raw_parquet_files(lang)
 
     if not parquet_files:
-        print("No raw data found. Run prepare_data.py --phase download first.")
+        print("No raw data found. Run prepare.py --phase download first.")
         return
 
     # Load eval doc IDs to exclude

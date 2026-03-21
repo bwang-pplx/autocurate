@@ -22,7 +22,7 @@ import time
 
 import pyarrow.parquet as pq
 
-from prepare_data import get_lang_dir, list_raw_parquet_files
+from prepare import get_lang_dir, list_raw_parquet_files
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -142,7 +142,7 @@ def sample_documents_multi(lang, n_batches, n_per_batch, from_filtered=False, ba
 
     parquet_files = list_raw_parquet_files(lang)
     if not parquet_files:
-        print("No raw data found. Run prepare_data.py --phase download first.")
+        print("No raw data found. Run prepare.py --phase download first.")
         return []
 
     rng = random.Random(base_seed)

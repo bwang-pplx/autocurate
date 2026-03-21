@@ -18,7 +18,7 @@ import rustbpe
 import tiktoken
 import torch
 
-from prepare_data import list_raw_parquet_files
+from prepare import list_raw_parquet_files
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch")
 TOKENIZER_DIR = os.path.join(CACHE_DIR, "tokenizer")
@@ -57,7 +57,7 @@ def setup(lang):
 
     parquet_files = list_raw_parquet_files(lang)
     if not parquet_files:
-        print("No raw data found. Run prepare_data.py --phase download first.")
+        print("No raw data found. Run prepare.py --phase download first.")
         sys.exit(1)
 
     print(f"Training BPE tokenizer (vocab_size={VOCAB_SIZE}) on {lang}...")
