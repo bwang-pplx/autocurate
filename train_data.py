@@ -26,8 +26,10 @@ cap = torch.cuda.get_device_capability()
 repo = "varunneal/flash-attention-3" if cap == (9, 0) else "kernels-community/flash-attn3"
 fa3 = get_kernel(repo).flash_attn_interface
 
-from prepare import MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, get_token_bytes
-from prepare_data import make_filtered_dataloader, make_eval_dataloader
+from prepare_data import (
+    MAX_SEQ_LEN, TIME_BUDGET, Tokenizer, get_token_bytes,
+    make_filtered_dataloader, make_eval_dataloader,
+)
 
 # ---------------------------------------------------------------------------
 # GPT Model (frozen — identical to train.py)

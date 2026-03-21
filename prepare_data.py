@@ -19,15 +19,74 @@ import json
 import argparse
 import random
 
+import pickle
+
 import pyarrow.parquet as pq
 import numpy as np
+import torch
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
 CACHE_DIR = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch-data")
+TOKENIZER_DIR = os.path.join(os.path.expanduser("~"), ".cache", "autoresearch", "tokenizer")
 HF_DATASET = "HuggingFaceFW/fineweb-2"
+
+MAX_SEQ_LEN = 2048       # context length
+TIME_BUDGET = 300        # training time budget in seconds (5 minutes)
+EVAL_TOKENS = 40 * 524288  # number of tokens for val eval
+
+SPECIAL_TOKENS = [f"<|reserved_{i}|>" for i in range(4)]
+BOS_TOKEN = "<|reserved_0|>"
+
+# ---------------------------------------------------------------------------
+# Tokenizer (moved from prepare.py)
+# ---------------------------------------------------------------------------
+
+class Tokenizer:
+    """Minimal tokenizer wrapper."""
+
+    def __init__(self, enc):
+        self.enc = enc
+        self.bos_token_id = enc.encode_single_token(BOS_TOKEN)
+
+    @classmethod
+    def from_directory(cls, tokenizer_dir=TOKENIZER_DIR):
+        with open(os.path.join(tokenizer_dir, "tokenizer.pkl"), "rb") as f:
+            enc = pickle.load(f)
+        return cls(enc)
+
+    def get_vocab_size(self):
+        return self.enc.n_vocab
+
+    def get_bos_token_id(self):
+        return self.bos_token_id
+
+    def encode(self, text, prepend=None, num_threads=8):
+        if prepend is not None:
+            prepend_id = prepend if isinstance(prepend, int) else self.enc.encode_single_token(prepend)
+        if isinstance(text, str):
+            ids = self.enc.encode_ordinary(text)
+            if prepend is not None:
+                ids.insert(0, prepend_id)
+        elif isinstance(text, list):
+            ids = self.enc.encode_ordinary_batch(text, num_threads=num_threads)
+            if prepend is not None:
+                for row in ids:
+                    row.insert(0, prepend_id)
+        else:
+            raise ValueError(f"Invalid input type: {type(text)}")
+        return ids
+
+    def decode(self, ids):
+        return self.enc.decode(ids)
+
+
+def get_token_bytes(device="cpu"):
+    path = os.path.join(TOKENIZER_DIR, "token_bytes.pt")
+    with open(path, "rb") as f:
+        return torch.load(f, map_location=device)
 
 # ---------------------------------------------------------------------------
 # Configuration
