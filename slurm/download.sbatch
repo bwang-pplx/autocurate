@@ -18,6 +18,6 @@ echo "$(date) | Node: $(hostname)"
 echo "$(date) | Installing dependencies (uv sync)..."
 uv sync 2>&1
 echo "$(date) | Dependencies ready."
-echo "$(date) | Downloading fineweb-2 for $LANG..."
-PYTHONUNBUFFERED=1 uv run prepare_data.py --lang "$LANG" 2>&1
+echo "$(date) | Downloading fineweb-2 for $LANG (capped at 10M docs)..."
+PYTHONUNBUFFERED=1 uv run prepare_data.py --lang "$LANG" --max-docs 10000000 2>&1
 echo "$(date) | Download complete."
