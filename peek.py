@@ -539,13 +539,14 @@ if __name__ == "__main__":
             break
         print(f"\nRetry {retry+1}: Could not parse function, asking again...")
         retry_prompt = (
-            "Your previous response did not contain a valid Python function.\n"
-            "Output ONLY this format, nothing else:\n\n"
+            "Your previous response did not contain a valid Python function.\n\n"
+            "Here is a summary of the observations again:\n"
+            + "\n".join(obs[:500] for obs in all_observations) + "\n\n"
+            "Now output ONLY this exact format — no explanation, no thinking:\n\n"
             "## Problem\nOne sentence.\n\n"
             "## Type\ncleaner\n\n"
-            "## Function\n```python\ndef clean_example(text):\n    return text\n```\n\n"
-            "## Expected Impact\nX% of docs\n\n"
-            "Now write the fix for the #1 problem from your observations."
+            "## Function\n```python\ndef clean_something(text):\n    # your fix here\n    return text\n```\n\n"
+            "## Expected Impact\nX% of docs"
         )
         response = query_qwen(retry_prompt)
         print("=" * 70)
