@@ -300,21 +300,12 @@ def validate_code(code):
     except SyntaxError as e:
         return False, f"SyntaxError: {e}"
 
-    # Only these imports are allowed (stdlib text processing tools)
+    # Only these imports are allowed
     allowed_modules = {
-        "re",              # regex
-        "string",          # string constants (punctuation, digits, etc.)
-        "unicodedata",     # unicode categories, normalization
-        "collections",     # Counter, defaultdict
-        "functools",       # lru_cache etc.
-        "itertools",       # groupby etc.
-        "math",            # basic math
-        "html",            # unescape HTML entities
-        "textwrap",        # text wrapping/dedent
-        "difflib",         # sequence matching (detect near-duplicate paragraphs)
-        "hashlib",         # hashing (dedup lines/paragraphs)
-        "json",            # detect/parse JSON blobs in text
-        "urllib",          # parse URLs found in text
+        "re", "string", "unicodedata", "collections", "functools",
+        "itertools", "math", "html", "textwrap", "difflib",
+        "hashlib", "json", "urllib",
+        "templates",       # our pre-built filter templates
     }
 
     for node in _ast.walk(tree):
