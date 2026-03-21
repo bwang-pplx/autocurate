@@ -21,3 +21,11 @@ dev/
 
 # Results file
 results.tsv
+filter_*.py
+results_*.tsv
+peek_history_*.jsonl
+logs/
+export/
+.venv*
+run_*.log
+*.pyc
