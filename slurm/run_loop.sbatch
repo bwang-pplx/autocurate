@@ -50,7 +50,7 @@ fi
 
 echo "$(date) | Starting vLLM server on GPU 0-3 (TP=4)..."
 CUDA_VISIBLE_DEVICES=0,1,2,3 "$VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
-    --model Qwen/Qwen3.5-35B-A3B \
+    --model Qwen/Qwen3.5-122B-A10B-FP8 \
     --tensor-parallel-size 4 \
     --max-model-len 32768 \
     --host 0.0.0.0 \
@@ -81,7 +81,7 @@ fi
 
 # Export for peek.py
 export VLLM_URL="http://localhost:8000/v1/chat/completions"
-export JUDGE_MODEL="Qwen/Qwen3.5-35B-A3B"
+export JUDGE_MODEL="Qwen/Qwen3.5-122B-A10B-FP8"
 
 # Training uses GPU 7
 export CUDA_VISIBLE_DEVICES=7
