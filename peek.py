@@ -451,6 +451,32 @@ def rollback_fix(lang, parsed):
 
     print(f"Rolled back {func_name} from {filter_path}")
 
+def _ask_qwen_to_fix(parsed, error, all_observations):
+    """Ask Qwen to fix its broken code given the error message."""
+    print(f"\nAsking Qwen to fix the error...")
+    fix_prompt = (
+        f"Your Python function had an error:\n\n"
+        f"```python\n{parsed['code']}\n```\n\n"
+        f"Error: {error}\n\n"
+        f"Fix the function. Keep it SIMPLE (max 1-2 regex). "
+        f"Make sure all regex patterns are valid and the function actually modifies or filters text.\n"
+        f"Function name MUST be unique and descriptive. NEVER use clean_example.\n\n"
+        f"Output ONLY:\n\n"
+        f"## Problem\nOne sentence.\n\n"
+        f"## Type\n{parsed['type']}\n\n"
+        f"## Function\n```python\ndef fixed_function(text):\n    return text\n```\n\n"
+        f"## Expected Impact\nX% of docs"
+    )
+    response = query_qwen(fix_prompt)
+    print("=" * 70)
+    print(response)
+    print("=" * 70)
+    new_parsed = parse_response(response)
+    if new_parsed["code"]:
+        return new_parsed
+    return parsed  # give up, return original
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -595,25 +621,37 @@ if __name__ == "__main__":
         print("\n[dry-run] Would apply this fix but --dry-run was set.")
         exit(0)
 
-    # Validate: must be pure heuristic, no ML/network/non-stdlib
-    ok, reason = validate_code(parsed["code"])
-    if not ok:
-        print(f"Code validation FAILED: {reason}")
-        print("Fix rejected — must use only re/string/unicodedata/collections.")
-        exit(1)
+    # Apply + verify loop: if validation fails, ask Qwen to fix it (up to 3 attempts)
+    MAX_FIX_ATTEMPTS = 3
+    for attempt in range(MAX_FIX_ATTEMPTS):
+        # Validate imports
+        ok, reason = validate_code(parsed["code"])
+        if not ok:
+            print(f"Code validation FAILED: {reason}")
+            if attempt < MAX_FIX_ATTEMPTS - 1:
+                parsed = _ask_qwen_to_fix(parsed, reason, all_observations)
+                continue
+            print("Fix rejected after retries.")
+            exit(1)
 
-    ok = apply_fix_to_filter(args.lang, parsed, iteration=args.iteration)
-    if not ok:
-        print("Fix was NOT applied.")
-        exit(1)
+        # Apply
+        ok = apply_fix_to_filter(args.lang, parsed, iteration=args.iteration)
+        if not ok:
+            print("Fix was NOT applied.")
+            exit(1)
 
-    # Verify on ALL docs from ALL peeks
-    print(f"\nVerifying fix on {len(all_docs)} docs...")
-    ok, err = verify_fix(args.lang, all_docs)
-    if ok:
-        print("Verification passed.")
-    else:
-        print(f"Verification FAILED: {err}")
-        print("Rolling back fix...")
-        rollback_fix(args.lang, parsed)
-        exit(1)
+        # Verify on all sampled docs
+        print(f"\nVerifying fix on {len(all_docs)} docs...")
+        ok, err = verify_fix(args.lang, all_docs)
+        if ok:
+            print("Verification passed.")
+            break
+        else:
+            print(f"Verification FAILED: {err}")
+            print("Rolling back fix...")
+            rollback_fix(args.lang, parsed)
+            if attempt < MAX_FIX_ATTEMPTS - 1:
+                parsed = _ask_qwen_to_fix(parsed, err, all_observations)
+            else:
+                print("Fix rejected after retries.")
+                exit(1)
