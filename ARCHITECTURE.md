@@ -64,7 +64,6 @@ flowchart TB
         direction LR
         G03["GPU 0-3<br/>vLLM<br/>Qwen3.5-35B-A3B<br/>TP=4"]
         G7["GPU 7<br/>Training<br/>Frozen GPT"]
-        G456["GPU 4-6<br/>Idle"]
     end
 
     style SETUP fill:#e1f5fe
