@@ -2,7 +2,6 @@
 
 Autonomous data quality curation for [fineweb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2). An AI agent iteratively discovers quality problems in web-crawled text and builds a growing pipeline of heuristic fixes — validated by training a small language model and measuring BPB improvement.
 
-
 ## How it works
 
 ```
@@ -24,28 +23,20 @@ The filter file (`filter_{lang}.py`) grows over iterations, accumulating only ru
 ## Quick start
 
 ```bash
-# On a GPU node with 8 GPUs
 git clone https://github.com/bwang-pplx/autocurate.git
 cd autocurate
 
-# Launch for Danish (downloads data, starts vLLM + training loop)
-bash new_lang.sh dan_Latn 100
+# Launch for a language (downloads data, starts vLLM + training loop)
+bash slurm/launch.sh dan_Latn 100
+
+# Multiple languages in parallel (each takes 8 GPUs)
+bash slurm/launch.sh swe_Latn 100
+bash slurm/launch.sh nob_Latn 100
+bash slurm/launch.sh fin_Latn 100
 
 # Monitor
 tail -f logs/loop_*.out
 cat results_dan.tsv
-```
-
-## Launch on SLURM
-
-```bash
-# Single language
-bash slurm/launch.sh dan_Latn 100
-
-# Multiple languages in parallel (each takes 8 GPUs)
-bash new_lang.sh swe_Latn 100
-bash new_lang.sh nob_Latn 100
-bash new_lang.sh fin_Latn 100
 ```
 
 ## GPU layout
@@ -102,14 +93,14 @@ Output preserves fineweb-2's structure: `data/{lang}/train/*.parquet`
 | File | Role |
 |---|---|
 | `peek.py` | Sample docs → Qwen analysis → synthesize fix → verify → append |
-| `filter_{lang}.py` | Auto-growing pipeline of cleaners + filters (per language) |
+| `filter_{lang}.py` | Auto-growing pipeline of cleaners + filters (per language, gitignored) |
 | `filter.py` | Dispatcher: imports the right `filter_{lang}.py` |
 | `templates.py` | Pre-built, tested filter templates |
 | `prepare.py` | Download fineweb-2 + Wikipedia eval set + tokenizer + dataloader |
 | `train.py` | Frozen GPT model + training loop |
 | `setup_tokenizer.py` | Train 8K BPE tokenizer on target language |
 | `export.py` | Apply all rules to full dataset, push to HuggingFace |
-| `new_lang.sh` | Bootstrap a new language in one command |
+| `slurm/launch.sh` | Launch download + loop for a language |
 
 ## Architecture
 
