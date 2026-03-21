@@ -81,6 +81,8 @@ RULES:
 - Allowed imports: re, string, unicodedata, collections, html, hashlib
 - NO ML, NO numpy, NO network calls
 
+IMPORTANT: Function names MUST be unique and descriptive (e.g. clean_cookie_banners, filter_adult_spam, clean_truncated_sentences). NEVER use generic names like clean_example.
+
 Output EXACTLY this format and nothing else:
 
 ## Problem
@@ -91,7 +93,8 @@ cleaner
 
 ## Function
 ```python
-def clean_example(text):
+def clean_DESCRIPTIVE_NAME(text):
+    # your implementation
     return text
 ```
 
@@ -542,10 +545,11 @@ if __name__ == "__main__":
             "Your previous response did not contain a valid Python function.\n\n"
             "Here is a summary of the observations again:\n"
             + "\n".join(obs[:500] for obs in all_observations) + "\n\n"
-            "Now output ONLY this exact format — no explanation, no thinking:\n\n"
+            "Now output ONLY this exact format — no explanation, no thinking.\n"
+            "Function name MUST be unique and descriptive (e.g. clean_truncated_text, filter_seo_spam). NEVER use clean_example.\n\n"
             "## Problem\nOne sentence.\n\n"
             "## Type\ncleaner\n\n"
-            "## Function\n```python\ndef clean_something(text):\n    # your fix here\n    return text\n```\n\n"
+            "## Function\n```python\ndef clean_DESCRIPTIVE_NAME(text):\n    # your fix here\n    return text\n```\n\n"
             "## Expected Impact\nX% of docs"
         )
         response = query_qwen(retry_prompt)
