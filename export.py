@@ -1,7 +1,7 @@
 """
 Export the cleaned dataset to HuggingFace as a language subset.
 
-Applies the full filter pipeline (clean + filter) to all raw docs,
+Downloads the FULL dataset (not capped), applies the filter pipeline,
 writes cleaned parquet files, and pushes to HuggingFace.
 
 Each language is a config/subset, matching fineweb-2's structure:
@@ -12,6 +12,9 @@ Usage:
     python export.py --lang dan_Latn                          # export locally
     python export.py --lang dan_Latn --push                   # export + push to HF
     python export.py --lang dan_Latn --push --repo bwang-pplx/fineweb-2-autocurate
+
+NOTE: Run `python prepare_data.py --lang dan_Latn` WITHOUT --max-docs first
+      to download the full dataset for export.
 """
 
 import os
@@ -28,11 +31,7 @@ from prepare_data import get_lang_dir, get_eval_dir, list_raw_parquet_files
 HF_REPO = "bwang-pplx/fineweb-2-autocurate"
 EXPORT_DIR = "export"
 
-# Preserve the original fineweb-2 schema columns
-KEEP_COLUMNS = [
-    "text", "id", "dump", "url", "date", "file_path",
-    "language", "language_score", "language_script",
-]
+# Preserve all original fineweb-2 columns (discovered at runtime)
 
 
 def export_language(lang, push=False, repo=None):
@@ -76,11 +75,9 @@ def export_language(lang, push=False, repo=None):
             texts = rg.column("text").to_pylist()
             ids = rg.column("id").to_pylist()
 
-            # Read all columns we want to preserve
-            col_data = {}
-            for col in KEEP_COLUMNS:
-                if col in rg.schema.names:
-                    col_data[col] = rg.column(col).to_pylist()
+            # Read all columns from the original data
+            all_columns = rg.schema.names
+            col_data = {col: rg.column(col).to_pylist() for col in all_columns}
 
             for i in range(len(texts)):
                 doc_id = ids[i]
@@ -95,13 +92,8 @@ def export_language(lang, push=False, repo=None):
 
                 if lang_mod.should_keep(cleaned):
                     kept += 1
-                    # Build row with cleaned text + original metadata
-                    row = {}
-                    for col in KEEP_COLUMNS:
-                        if col == "text":
-                            row[col] = cleaned
-                        elif col in col_data:
-                            row[col] = col_data[col][i]
+                    row = {col: col_data[col][i] for col in all_columns}
+                    row["text"] = cleaned  # replace with cleaned text
                     shard_rows.append(row)
 
                     # Flush shard when full
@@ -112,7 +104,7 @@ def export_language(lang, push=False, repo=None):
 
         elapsed = time.time() - t0
         rate = total / max(elapsed, 1)
-        print(f"\r  [{fi+1}/{len(parquet_files)}] {total:,} docs, kept {kept:,} ({100*kept/max(total,1):.1f}%), {rate:,.0f} docs/s", end="", flush=True)
+        print(f"  [{fi+1}/{len(parquet_files)}] {total:,} docs, kept {kept:,} ({100*kept/max(total,1):.1f}%), {rate:,.0f} docs/s", flush=True)
 
     # Flush remaining
     if shard_rows:
