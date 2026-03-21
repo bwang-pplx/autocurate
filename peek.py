@@ -74,29 +74,25 @@ SYNTHESIZE_PROMPT = """You observed quality problems across {n_peeks} samples of
 Observations:
 {all_observations}
 
-Pick the #1 most frequent problem and write a Python function to fix it.
+Pick the #1 most frequent problem and fix it using one of these templates:
+
+{template_menu}
 
 RULES:
-- Do NOT explain your reasoning. Do NOT compare problems. Just output the fix.
-- Keep the function SIMPLE and FAST. Max 1-2 regex patterns. It runs on millions of docs.
-- Allowed imports: re, string, unicodedata, collections, html, hashlib
-- NO ML, NO numpy, NO network calls
-
-IMPORTANT: Function names MUST be unique and descriptive (e.g. clean_cookie_banners, filter_adult_spam, clean_truncated_sentences). NEVER use generic names like clean_example.
+- Do NOT explain your reasoning. Just pick a template and provide parameters.
+- Do NOT write regex or code. Just pick a template and list the strings/numbers.
 
 Output EXACTLY this format and nothing else:
 
 ## Problem
 One sentence describing the problem.
 
-## Type
-cleaner
+## Template
+TEMPLATE_NAME
 
-## Function
-```python
-def clean_DESCRIPTIVE_NAME(text):
-    # your implementation
-    return text
+## Params
+```json
+{{"param_name": ["value1", "value2"]}}
 ```
 
 ## Expected Impact
@@ -249,21 +245,40 @@ def query_qwen(prompt):
 # ---------------------------------------------------------------------------
 
 def parse_response(response):
-    """Parse Qwen's synthesized response into structured parts."""
+    """Parse Qwen's response — template-based or code-based."""
     result = {}
 
     m = re.search(r'## Problem\s*\n(.*?)(?=\n## )', response, re.DOTALL)
     result["problem"] = m.group(1).strip() if m else ""
 
+    m = re.search(r'## Expected Impact\s*\n(.*?)$', response, re.DOTALL)
+    result["impact"] = m.group(1).strip() if m else ""
+
+    # Try template format first
+    m = re.search(r'## Template\s*\n(\S+)', response)
+    if m:
+        result["template"] = m.group(1).strip()
+        m2 = re.search(r'## Params\s*\n```json\s*\n(.*?)```', response, re.DOTALL)
+        if m2:
+            try:
+                result["params"] = json.loads(m2.group(1).strip())
+            except json.JSONDecodeError:
+                result["params"] = None
+        else:
+            result["params"] = None
+        result["code"] = None
+        result["type"] = None
+        return result
+
+    # Fallback: code format
     m = re.search(r'## Type\s*\n(.*?)(?=\n## )', response, re.DOTALL)
     fix_type = m.group(1).strip().lower() if m else ""
     result["type"] = "cleaner" if "clean" in fix_type else "filter"
 
     m = re.search(r'## Function\s*\n```python\s*\n(.*?)```', response, re.DOTALL)
     result["code"] = m.group(1).strip() if m else ""
-
-    m = re.search(r'## Expected Impact\s*\n(.*?)$', response, re.DOTALL)
-    result["impact"] = m.group(1).strip() if m else ""
+    result["template"] = None
+    result["params"] = None
 
     return result
 
@@ -312,6 +327,35 @@ def validate_code(code):
             root = node.module.split(".")[0]
             if root not in allowed_modules:
                 return False, f"Banned import: from {node.module}. Only {allowed_modules} allowed."
+
+    # Execute the function on test inputs to catch runtime errors (broken regex etc.)
+    func_name = None
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.FunctionDef):
+            func_name = node.name
+            break
+    if func_name:
+        test_inputs = [
+            "This is a test document with some text.",
+            "Læs mere her. Klik her for at se mere.",
+            "Kort tekst.",
+            "A" * 5000,  # long doc
+            "",  # empty
+        ]
+        namespace = {}
+        try:
+            exec(compile(code, "<validate>", "exec"), namespace)
+        except Exception as e:
+            return False, f"Code execution failed: {e}"
+        func = namespace.get(func_name)
+        if func:
+            for test in test_inputs:
+                try:
+                    result = func(test)
+                    if not isinstance(result, (str, bool)):
+                        return False, f"Function returned {type(result)}, expected str or bool"
+                except Exception as e:
+                    return False, f"Function crashed on test input: {e}"
 
     return True, ""
 
@@ -382,17 +426,6 @@ def verify_fix(lang, all_docs):
     except Exception as e:
         return False, f"Import error: {e}\n{traceback.format_exc()}"
 
-    # Validate all regex patterns in the source code
-    filter_path = os.path.join(os.path.dirname(__file__), f"filter_{lang_code}.py")
-    with open(filter_path) as f:
-        source = f.read()
-    # Find all raw string regex patterns and try to compile them
-    for m in re.finditer(r"""r['"](.+?)['"]""", source):
-        pattern = m.group(1)
-        try:
-            re.compile(pattern)
-        except re.error as e:
-            return False, f"Invalid regex r'{pattern}': {e}"
 
     # Run on all sampled docs, check for crashes and effectiveness
     n_changed = 0
@@ -570,11 +603,14 @@ if __name__ == "__main__":
     # Phase 2: Synthesize — merge observations into one fix
     # ---------------------------------------------------------------
 
+    from templates import TEMPLATES, get_template_menu
+
     print(f"\nSynthesizing fix from {n_peeks} observations...")
     synth_prompt = SYNTHESIZE_PROMPT.format(
         n_peeks=n_peeks,
         lang=lang_name,
         all_observations="\n\n".join(all_observations),
+        template_menu=get_template_menu(),
     )
 
     t0 = time.time()
@@ -586,21 +622,18 @@ if __name__ == "__main__":
     print(response)
     print("=" * 70)
 
-    # Parse, retry up to 2 times if Qwen doesn't follow format
+    # Parse response
     parsed = parse_response(response)
-    for retry in range(2):
-        if parsed["code"]:
-            break
-        print(f"\nRetry {retry+1}: Could not parse function, asking again...")
+
+    if not parsed.get("template") and not parsed.get("code"):
+        print("\nRetry: could not parse response, asking again...")
         retry_prompt = (
-            "Your previous response did not contain a valid Python function.\n\n"
-            "Here is a summary of the observations again:\n"
-            + "\n".join(obs[:500] for obs in all_observations) + "\n\n"
-            "Now output ONLY this exact format — no explanation, no thinking.\n"
-            "Function name MUST be unique and descriptive (e.g. clean_truncated_text, filter_seo_spam). NEVER use clean_example.\n\n"
+            "Your response was not in the correct format. Pick a template:\n\n"
+            + get_template_menu() + "\n\n"
+            "Output ONLY:\n\n"
             "## Problem\nOne sentence.\n\n"
-            "## Type\ncleaner\n\n"
-            "## Function\n```python\ndef clean_DESCRIPTIVE_NAME(text):\n    # your fix here\n    return text\n```\n\n"
+            "## Template\nTEMPLATE_NAME\n\n"
+            "## Params\n```json\n{}\n```\n\n"
             "## Expected Impact\nX% of docs"
         )
         response = query_qwen(retry_prompt)
@@ -609,38 +642,61 @@ if __name__ == "__main__":
         print("=" * 70)
         parsed = parse_response(response)
 
-    if not parsed["code"]:
-        print("\nERROR: Could not parse a function after retries.")
-        exit(1)
+    print(f"\nParsed: template={parsed.get('template')}, problem={parsed['problem'][:120]}")
 
-    print(f"\nParsed: type={parsed['type']}, function={extract_function_name(parsed['code'])}")
-    print(f"Problem: {parsed['problem'][:120]}")
-
-    # Apply
     if args.dry_run:
         print("\n[dry-run] Would apply this fix but --dry-run was set.")
         exit(0)
 
-    # Apply + verify loop: if validation fails, ask Qwen to fix it (up to 3 attempts)
-    MAX_FIX_ATTEMPTS = 3
-    for attempt in range(MAX_FIX_ATTEMPTS):
-        # Validate imports
-        ok, reason = validate_code(parsed["code"])
-        if not ok:
-            print(f"Code validation FAILED: {reason}")
-            if attempt < MAX_FIX_ATTEMPTS - 1:
-                parsed = _ask_qwen_to_fix(parsed, reason, all_observations)
-                continue
-            print("Fix rejected after retries.")
+    # Generate code from template
+    if parsed.get("template") and parsed.get("params") is not None:
+        template_name = parsed["template"]
+        if template_name not in TEMPLATES:
+            print(f"Unknown template: {template_name}")
             exit(1)
 
-        # Apply
+        tmpl = TEMPLATES[template_name]
+        params_json = json.dumps(parsed["params"])
+        # Generate a clean function that calls the template
+        func_name = f"{tmpl['type']}_{template_name.lower()}_{args.iteration or 0}"
+        if tmpl["type"] == "cleaner":
+            code = (
+                f"def {func_name}(text):\n"
+                f"    from templates import {tmpl['fn'].__name__}\n"
+                f"    return {tmpl['fn'].__name__}(text, **{params_json})\n"
+            )
+            parsed["type"] = "cleaner"
+        else:
+            code = (
+                f"def {func_name}(text):\n"
+                f"    from templates import {tmpl['fn'].__name__}\n"
+                f"    return {tmpl['fn'].__name__}(text, **{params_json})\n"
+            )
+            parsed["type"] = "filter"
+        parsed["code"] = code
+        print(f"Generated from template {template_name}: {func_name}")
+    elif not parsed.get("code"):
+        print("ERROR: No template or code in response.")
+        exit(1)
+
+    # Apply + verify
+    MAX_FIX_ATTEMPTS = 3
+    for attempt in range(MAX_FIX_ATTEMPTS):
+        if parsed.get("code"):
+            ok, reason = validate_code(parsed["code"])
+            if not ok:
+                print(f"Code validation FAILED: {reason}")
+                if attempt < MAX_FIX_ATTEMPTS - 1:
+                    parsed = _ask_qwen_to_fix(parsed, reason, all_observations)
+                    continue
+                print("Fix rejected after retries.")
+                exit(1)
+
         ok = apply_fix_to_filter(args.lang, parsed, iteration=args.iteration)
         if not ok:
             print("Fix was NOT applied.")
             exit(1)
 
-        # Verify on all sampled docs
         print(f"\nVerifying fix on {len(all_docs)} docs...")
         ok, err = verify_fix(args.lang, all_docs)
         if ok:
