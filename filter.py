@@ -87,7 +87,7 @@ def apply_pipeline(lang, preview=0, max_kept=MAX_KEPT_DOCS):
             if total % 500_000 == 0 and total > 0:
                 elapsed = time.time() - t0
                 rate = total / elapsed
-                print(f"\r  [{fi+1}/{len(parquet_files)} files] {total:,} docs, kept {kept:,} ({100*kept/max(total,1):.1f}%), {rate:,.0f} docs/s", end="", flush=True)
+                print(f"  [{fi+1}/{len(parquet_files)} files] {total:,} docs, kept {kept:,} ({100*kept/max(total,1):.1f}%), {rate:,.0f} docs/s", flush=True)
 
             if max_kept and kept >= max_kept:
                 break
