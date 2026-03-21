@@ -1,5 +1,5 @@
 [project]
-name = "auto-curate"
+name = "autocurate"
 version = "0.1.0"
 description = "Autonomous data quality curation for fineweb-2"
 requires-python = ">=3.10"

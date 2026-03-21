@@ -1,4 +1,4 @@
-# auto-curate
+# autocurate
 
 Autonomous data quality curation for [fineweb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2). An AI agent iteratively discovers quality problems in web-crawled text and builds a growing pipeline of heuristic fixes — validated by training a small language model and measuring BPB improvement.
 
@@ -26,8 +26,8 @@ The filter file (`filter_{lang}.py`) grows over iterations, accumulating only ru
 
 ```bash
 # On a GPU node with 8 GPUs
-git clone https://github.com/bwang-pplx/auto-curate.git
-cd auto-curate
+git clone https://github.com/bwang-pplx/autocurate.git
+cd autocurate
 
 # Launch for Danish (downloads data, starts vLLM + training loop)
 bash new_lang.sh dan_Latn 100
