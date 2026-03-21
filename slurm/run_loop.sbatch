@@ -107,6 +107,12 @@ echo ""
 echo "$(date) | Setting up tokenizer..."
 PYTHONUNBUFFERED=1 uv run setup_tokenizer.py --lang "$LANG" 2>&1
 
+# Skip baseline if already done
+if grep -q "baseline" "$RESULTS" 2>/dev/null; then
+    echo "$(date) | Baseline already in results.tsv, skipping"
+    BEST_BPB=$(grep "keep" "$RESULTS" | tail -1 | awk '{print $2}')
+    echo "$(date) | Best BPB so far: $BEST_BPB"
+else
 echo "$(date) | === Baseline (no filter) ==="
 
 # Select all docs except eval set
@@ -147,6 +153,7 @@ printf "%s\t%s\t%s\tkeep\tbaseline (no filter)\n" "$COMMIT" "$BASELINE_BPB" "$BA
 echo "$(date) | Baseline: val_bpb=$BASELINE_BPB mem=${BASELINE_MEM_GB}GB"
 
 BEST_BPB="$BASELINE_BPB"
+fi  # end baseline skip check
 
 # ---------------------------------------------------------------------------
 # Main loop
@@ -213,14 +220,36 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
     # Step 6: Keep or revert
     IMPROVED=$(python3 -c "print('yes' if float('$VAL_BPB') < float('$BEST_BPB') else 'no')")
     if [ "$IMPROVED" = "yes" ]; then
+        STATUS="keep"
         echo "$(date) | [iter $ITER] KEEP — BPB improved $BEST_BPB → $VAL_BPB"
         printf "%s\t%s\t%s\tkeep\t%s\n" "$COMMIT" "$VAL_BPB" "$MEM_GB" "$DESCRIPTION" >> "$RESULTS"
         BEST_BPB="$VAL_BPB"
     else
+        STATUS="discard"
         echo "$(date) | [iter $ITER] DISCARD — BPB $VAL_BPB >= $BEST_BPB"
         printf "%s\t%s\t%s\tdiscard\t%s\n" "$COMMIT" "$VAL_BPB" "$MEM_GB" "$DESCRIPTION" >> "$RESULTS"
         git revert --no-edit HEAD 2>/dev/null || git reset --hard HEAD~1
     fi
+
+    # Log full details to history
+    FUNC_CODE=$(python3 -c "
+import json, re
+log = open('logs/peek_iter${ITER}.log').read()
+# Extract the function code from the log
+m = re.search(r'## Function\s*\n\`\`\`python\s*\n(.*?)\`\`\`', log, re.DOTALL)
+code = m.group(1).strip() if m else ''
+print(json.dumps({
+    'iteration': $ITER,
+    'commit': '$COMMIT',
+    'status': '$STATUS',
+    'val_bpb': float('$VAL_BPB'),
+    'best_bpb': float('$BEST_BPB'),
+    'description': '$DESCRIPTION',
+    'code': code,
+    'timestamp': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
+}))
+" 2>/dev/null)
+    [ -n "$FUNC_CODE" ] && echo "$FUNC_CODE" >> peek_history.jsonl
 done
 
 echo ""
