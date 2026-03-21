@@ -78,6 +78,7 @@ Pick the #1 most frequent problem and write a Python function to fix it.
 
 RULES:
 - Do NOT explain your reasoning. Do NOT compare problems. Just output the fix.
+- Keep the function SIMPLE and FAST. Max 1-2 regex patterns. It runs on millions of docs.
 - Allowed imports: re, string, unicodedata, collections, html, hashlib
 - NO ML, NO numpy, NO network calls
 
