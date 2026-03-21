@@ -69,41 +69,34 @@ Here are the documents:
 # Phase 2 prompt: synthesize observations into one fix
 # ---------------------------------------------------------------------------
 
-SYNTHESIZE_PROMPT = """You are a data quality researcher. You have observed quality problems
-across {n_peeks} random samples of {lang} web text (fineweb-2).
+SYNTHESIZE_PROMPT = """You observed quality problems across {n_peeks} samples of {lang} web text.
 
-Here are all the observations, collected from different samples:
-
+Observations:
 {all_observations}
 
-Now:
-1. **RANK** the problems by how frequently they appeared across samples.
-2. **PICK** the single most impactful problem — the one that affects the most documents.
-3. **WRITE** exactly ONE Python function to fix it. It must be either:
-   - A **cleaner** named `clean_<description>(text: str) -> str` that modifies text
-   - A **filter** named `filter_<description>(text: str) -> bool` returning True to keep
-   Allowed imports: re, string, unicodedata, collections, html, hashlib, difflib, json, urllib, textwrap, math.
-   NO ML, NO network calls, NO numpy/pandas/torch. Pure heuristic only.
+Pick the #1 most frequent problem and write a Python function to fix it.
 
-IMPORTANT: Output ONLY in this exact format:
+RULES:
+- Do NOT explain your reasoning. Do NOT compare problems. Just output the fix.
+- Allowed imports: re, string, unicodedata, collections, html, hashlib
+- NO ML, NO numpy, NO network calls
+
+Output EXACTLY this format and nothing else:
 
 ## Problem
-<one paragraph describing the most common problem>
-
-## Frequency
-<how often it appeared across the {n_peeks} samples>
+One sentence describing the problem.
 
 ## Type
-<either "cleaner" or "filter">
+cleaner
 
 ## Function
 ```python
-def <name>(text):
-    <implementation>
+def clean_example(text):
+    return text
 ```
 
 ## Expected Impact
-<what % of docs affected>
+X% of docs
 """
 
 # ---------------------------------------------------------------------------
@@ -530,10 +523,29 @@ if __name__ == "__main__":
     print(response)
     print("=" * 70)
 
-    # Parse
+    # Parse, retry up to 2 times if Qwen doesn't follow format
     parsed = parse_response(response)
+    for retry in range(2):
+        if parsed["code"]:
+            break
+        print(f"\nRetry {retry+1}: Could not parse function, asking again...")
+        retry_prompt = (
+            "Your previous response did not contain a valid Python function.\n"
+            "Output ONLY this format, nothing else:\n\n"
+            "## Problem\nOne sentence.\n\n"
+            "## Type\ncleaner\n\n"
+            "## Function\n```python\ndef clean_example(text):\n    return text\n```\n\n"
+            "## Expected Impact\nX% of docs\n\n"
+            "Now write the fix for the #1 problem from your observations."
+        )
+        response = query_qwen(retry_prompt)
+        print("=" * 70)
+        print(response)
+        print("=" * 70)
+        parsed = parse_response(response)
+
     if not parsed["code"]:
-        print("\nERROR: Could not parse a function from Qwen's response.")
+        print("\nERROR: Could not parse a function after retries.")
         exit(1)
 
     print(f"\nParsed: type={parsed['type']}, function={extract_function_name(parsed['code'])}")
