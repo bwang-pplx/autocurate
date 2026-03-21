@@ -64,12 +64,15 @@ def replace_strings(text, replacements):
 
 
 def remove_duplicate_lines(text):
-    """Remove exact duplicate lines, keeping first occurrence."""
+    """Remove exact duplicate non-empty lines, keeping first occurrence."""
     seen = set()
     lines = []
     for line in text.split("\n"):
         stripped = line.strip()
-        if stripped and stripped in seen:
+        if not stripped:
+            lines.append(line)
+            continue
+        if stripped in seen:
             continue
         seen.add(stripped)
         lines.append(line)
