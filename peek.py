@@ -366,8 +366,8 @@ def apply_fix_to_filter(lang, parsed, iteration=None):
 # ---------------------------------------------------------------------------
 
 def verify_fix(lang, all_docs):
-    """Run the updated filter on all sampled docs to check for crashes.
-    Returns (ok, error_message)."""
+    """Run the updated filter on all sampled docs. Check for crashes,
+    broken regex, and no-ops. Returns (ok, error_message)."""
     import importlib
     import traceback
 
@@ -382,12 +382,36 @@ def verify_fix(lang, all_docs):
     except Exception as e:
         return False, f"Import error: {e}\n{traceback.format_exc()}"
 
+    # Validate all regex patterns in the source code
+    filter_path = os.path.join(os.path.dirname(__file__), f"filter_{lang_code}.py")
+    with open(filter_path) as f:
+        source = f.read()
+    # Find all raw string regex patterns and try to compile them
+    for m in re.finditer(r"""r['"](.+?)['"]""", source):
+        pattern = m.group(1)
+        try:
+            re.compile(pattern)
+        except re.error as e:
+            return False, f"Invalid regex r'{pattern}': {e}"
+
+    # Run on all sampled docs, check for crashes and effectiveness
+    n_changed = 0
+    n_filtered = 0
     for i, doc in enumerate(all_docs):
         try:
             cleaned = lang_mod.clean(doc["text"])
-            lang_mod.should_keep(cleaned)
+            kept = lang_mod.should_keep(cleaned)
+            if cleaned != doc["text"]:
+                n_changed += 1
+            if not kept:
+                n_filtered += 1
         except Exception as e:
             return False, f"Crashed on doc {i} ({doc['doc_id']}): {e}\n{traceback.format_exc()}"
+
+    print(f"  Effect: {n_changed} cleaned, {n_filtered} filtered out of {len(all_docs)} docs", flush=True)
+
+    if n_changed == 0 and n_filtered == 0:
+        return False, f"No-op: function had no effect on any of {len(all_docs)} sampled docs"
 
     return True, ""
 
