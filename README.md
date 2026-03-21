@@ -2,7 +2,6 @@
 
 Autonomous data quality curation for [fineweb-2](https://huggingface.co/datasets/HuggingFaceFW/fineweb-2). An AI agent iteratively discovers quality problems in web-crawled text and builds a growing pipeline of heuristic fixes — validated by training a small language model and measuring BPB improvement.
 
-The output is [fineweb-2-autocurate](https://huggingface.co/datasets/bwang-pplx/fineweb-2-autocurate): a higher-quality, smaller subset of fineweb-2, processed language by language.
 
 ## How it works
 
