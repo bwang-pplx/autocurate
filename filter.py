@@ -28,8 +28,11 @@ def load_lang_filter(lang):
         raise
 
 
-def apply_pipeline(lang, preview=0):
-    """Apply clean + filter to all documents. Output selected doc_ids."""
+# 5 min training ≈ 500M tokens ≈ 2M docs. Keep 5x margin for variety.
+MAX_KEPT_DOCS = 5_000_000
+
+def apply_pipeline(lang, preview=0, max_kept=MAX_KEPT_DOCS):
+    """Apply clean + filter to documents. Stops early once we have enough."""
     lang_mod = load_lang_filter(lang)
     lang_dir = get_lang_dir(lang)
     parquet_files = list_raw_parquet_files(lang)
@@ -85,6 +88,11 @@ def apply_pipeline(lang, preview=0):
                 elapsed = time.time() - t0
                 rate = total / elapsed
                 print(f"\r  [{fi+1}/{len(parquet_files)} files] {total:,} docs, kept {kept:,} ({100*kept/max(total,1):.1f}%), {rate:,.0f} docs/s", end="", flush=True)
+
+            if max_kept and kept >= max_kept:
+                break
+        if max_kept and kept >= max_kept:
+            break
 
     # Save selected doc IDs
     output_path = os.path.join(lang_dir, "selected_doc_ids.json")
