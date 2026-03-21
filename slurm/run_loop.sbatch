@@ -132,13 +132,19 @@ eval_ids = set()
 ep = os.path.join(get_eval_dir(lang), 'eval_doc_ids.json')
 if os.path.exists(ep):
     eval_ids = set(json.load(open(ep)))
+MAX_DOCS = 5_000_000
 all_ids = []
 for fp in list_raw_parquet_files(lang):
     pf = pq.ParquetFile(fp)
     for rg in range(pf.num_row_groups):
         ids = pf.read_row_group(rg).column('id').to_pylist()
         all_ids.extend([i for i in ids if i not in eval_ids])
+        if len(all_ids) >= MAX_DOCS:
+            break
     print(f'  {len(all_ids):,} docs...', flush=True)
+    if len(all_ids) >= MAX_DOCS:
+        break
+all_ids = all_ids[:MAX_DOCS]
 out = os.path.join(get_lang_dir(lang), 'selected_doc_ids.json')
 json.dump(all_ids, open(out, 'w'))
 print(f'Baseline: {len(all_ids):,} docs selected')
