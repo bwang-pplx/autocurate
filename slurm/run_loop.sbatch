@@ -217,25 +217,6 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
         git_locked git commit -m "revert iter $ITER [$LANG_CODE]" --no-verify 2>/dev/null || true
     fi
 
-    # Log full details to history
-    FUNC_CODE=$(python3 -c "
-import json, re
-log = open('logs/peek_${LANG_CODE}_iter${ITER}.log').read()
-# Extract the function code from the log
-m = re.search(r'## Function\s*\n\`\`\`python\s*\n(.*?)\`\`\`', log, re.DOTALL)
-code = m.group(1).strip() if m else ''
-print(json.dumps({
-    'iteration': $ITER,
-    'commit': '$COMMIT',
-    'status': '$STATUS',
-    'val_bpb': float('$VAL_BPB'),
-    'best_bpb': float('$BEST_BPB'),
-    'description': '$DESCRIPTION',
-    'code': code,
-    'timestamp': '$(date -u +%Y-%m-%dT%H:%M:%SZ)',
-}))
-" 2>/dev/null)
-    [ -n "$FUNC_CODE" ] && echo "$FUNC_CODE" >> peek_history_${LANG_CODE}.jsonl
 done
 
 echo ""
