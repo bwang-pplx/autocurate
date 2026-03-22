@@ -5,18 +5,17 @@ Autonomous data quality curation for [fineweb-2](https://huggingface.co/datasets
 ## How it works
 
 ```
-Sample docs → Qwen reads N batches → Synthesize fix → Verify → Filter → Train → BPB improved? → Keep/Revert
+Sample docs → LLM Peek → Propose fix → Verify → Train 5 min → BPB improved? → Keep/Revert
 ```
 
 Each iteration:
 
-1. **Peek** — Sample random documents, send to Qwen (via vLLM) across multiple rounds. Qwen identifies quality problems (boilerplate, spam, truncation, etc.)
-2. **Synthesize** — Qwen picks from a menu of pre-built filter templates and provides parameters (string lists, thresholds). No regex or code generation needed.
+1. **Peek** — Sample random documents, send to LLM (via vLLM) across multiple rounds. LLM identifies quality problems (boilerplate, spam, truncation, etc.)
+2. **Synthesize** — LLM picks from a menu of pre-built filter templates and provides parameters (string lists, thresholds). No regex or code generation needed.
 3. **Verify** — Execute the fix on sampled docs. Reject if it crashes, has no effect, or uses banned imports.
-4. **Filter** — Apply the growing pipeline of rules to the corpus (capped at 5M docs for speed).
-5. **Train** — Train a frozen small GPT for 5 minutes on the filtered data.
-6. **Evaluate** — Measure BPB on a held-out Wikipedia eval set.
-7. **Decide** — BPB improved → keep the rule. BPB worse → `git revert`.
+4. **Train** — Train a frozen small GPT for 5 minutes on the filtered data (clean + filter applied on the fly).
+5. **Evaluate** — Measure BPB on a held-out Wikipedia eval set.
+6. **Decide** — BPB improved → keep the rule. BPB worse → `git revert`.
 
 The filter file (`filter_{lang}.py`) grows over iterations, accumulating only rules that improve data quality.
 
