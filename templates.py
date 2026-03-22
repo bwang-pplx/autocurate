@@ -115,12 +115,6 @@ TEMPLATES = {
         "params": "patterns: list of strings to match in trailing lines",
         "description": "Strip trailing lines matching patterns (footers, disclaimers)",
     },
-    "DROP_SHORT_DOCS": {
-        "fn": drop_short_docs,
-        "type": "filter",
-        "params": "min_chars: minimum character count (default 200)",
-        "description": "Drop documents shorter than min_chars",
-    },
     "DROP_IF_KEYWORD_DENSITY": {
         "fn": drop_if_keyword_density,
         "type": "filter",
