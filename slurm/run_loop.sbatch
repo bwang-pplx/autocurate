@@ -153,12 +153,17 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
     # Step 1: Peek
     PEEK_ARGS="--lang $LANG --iteration $ITER --seed $SEED"
 
+    # Reset filter file to last committed state before peeking
+    git_locked git checkout -- "filter_${LANG_CODE}.py" 2>/dev/null || true
+
     echo "$(date) | [iter $ITER] Peeking..."
     CUDA_VISIBLE_DEVICES="" PYTHONUNBUFFERED=1 uv run peek.py $PEEK_ARGS 2>&1
     PEEK_EXIT=$?
 
     if [ $PEEK_EXIT -ne 0 ]; then
         echo "$(date) | [iter $ITER] Peek failed (exit $PEEK_EXIT), skipping"
+        # Ensure clean state after failure
+        git_locked git checkout -- "filter_${LANG_CODE}.py" 2>/dev/null || true
         continue
     fi
 
