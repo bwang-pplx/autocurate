@@ -17,6 +17,13 @@ LANG_CODE=$(echo "$LANG" | cut -d'_' -f1)
 
 mkdir -p logs
 
+# File lock for git operations (multiple languages may run in parallel)
+GIT_LOCK="/tmp/autocurate_git.lock"
+git_locked() {
+    # Run a git command under flock to prevent concurrent access
+    flock -w 60 "$GIT_LOCK" "$@"
+}
+
 echo "$(date) | Installing dependencies..."
 uv sync 2>&1
 echo "$(date) | Dependencies ready."
@@ -126,7 +133,7 @@ if [ -z "$BASELINE_BPB" ]; then
 fi
 
 BASELINE_MEM_GB=$(python3 -c "print(f'{float(\"$BASELINE_MEM\")/1024:.1f}')")
-COMMIT=$(git rev-parse --short HEAD)
+COMMIT=$(git_locked git rev-parse --short HEAD)
 printf "%s\t%s\t%s\tkeep\tbaseline (no filter)\n" "$COMMIT" "$BASELINE_BPB" "$BASELINE_MEM_GB" >> "$RESULTS"
 echo "$(date) | Baseline: val_bpb=$BASELINE_BPB mem=${BASELINE_MEM_GB}GB"
 
@@ -159,13 +166,13 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
     if ! git diff --quiet "filter_${LANG_CODE}.py" 2>/dev/null; then
         DESCRIPTION="iteration $ITER"
         [ -z "$DESCRIPTION" ] && DESCRIPTION="iteration $ITER"
-        git add "filter_${LANG_CODE}.py"
-        git commit -m "iter $ITER: $DESCRIPTION" --no-verify 2>/dev/null || true
+        git_locked git add "filter_${LANG_CODE}.py"
+        git_locked git commit -m "iter $ITER [$LANG_CODE]: $DESCRIPTION" --no-verify 2>/dev/null || true
     else
         echo "$(date) | [iter $ITER] No changes to filter, skipping"
         continue
     fi
-    COMMIT=$(git rev-parse --short HEAD)
+    COMMIT=$(git_locked git rev-parse --short HEAD)
 
     # Step 3: Train (filter happens on the fly inside the dataloader)
     echo "$(date) | [iter $ITER] Training..."
@@ -179,7 +186,7 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
         echo "$(date) | [iter $ITER] Training crashed!"
         tail -10 /tmp/train_${LANG_CODE}.log
         printf "%s\t0.000000\t0.0\tcrash\t%s\n" "$COMMIT" "$DESCRIPTION" >> "$RESULTS"
-        git revert --no-edit HEAD 2>/dev/null || git reset --hard HEAD~1
+        git_locked git revert --no-edit HEAD 2>/dev/null || git_locked git reset --hard HEAD~1
         continue
     fi
 
@@ -197,7 +204,7 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
         STATUS="discard"
         echo "$(date) | [iter $ITER] DISCARD — BPB $VAL_BPB >= $BEST_BPB"
         printf "%s\t%s\t%s\tdiscard\t%s\n" "$COMMIT" "$VAL_BPB" "$MEM_GB" "$DESCRIPTION" >> "$RESULTS"
-        git revert --no-edit HEAD 2>/dev/null || git reset --hard HEAD~1
+        git_locked git revert --no-edit HEAD 2>/dev/null || git_locked git reset --hard HEAD~1
     fi
 
     # Log full details to history
