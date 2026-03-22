@@ -50,7 +50,9 @@ def should_keep(text):
             return False
     return True
 PYEOF
-    echo "Created $FILTER_FILE"
+    git add "$FILTER_FILE"
+    git commit -m "Initialize $FILTER_FILE" --no-verify 2>/dev/null || true
+    echo "Created and committed $FILTER_FILE"
 fi
 
 # Step 1: Download data
