@@ -138,8 +138,9 @@ def _write_shard(out_dir, shard_idx, rows):
 
 
 def _push_to_hf(repo, lang, out_dir, total_docs, kept_docs):
-    """Push exported parquet files to HuggingFace."""
+    """Push exported parquet files to HuggingFace using upload_large_folder."""
     from huggingface_hub import HfApi
+    import subprocess
 
     api = HfApi()
 
@@ -149,17 +150,20 @@ def _push_to_hf(repo, lang, out_dir, total_docs, kept_docs):
     except Exception as e:
         print(f"  Note: {e}")
 
-    # Upload all parquet files
-    parquet_files = sorted(f for f in os.listdir(out_dir) if f.endswith(".parquet"))
-    print(f"\nPushing {len(parquet_files)} shards to {repo} (subset: {lang})...")
+    # Use upload_large_folder via CLI — handles large files, resumable
+    export_root = os.path.dirname(out_dir.rstrip("/"))  # export/data/{lang} -> export/data
+    export_root = os.path.dirname(export_root)           # export/data -> export
+    print(f"\nPushing to {repo} using upload-large-folder...")
+    print(f"  Local: {export_root}/", flush=True)
 
-    for f in parquet_files:
-        local_path = os.path.join(out_dir, f)
-        remote_path = f"data/{lang}/train/{f}"
-        print(f"  Uploading {f}...", flush=True)
-        api.upload_file(
-            path_or_fileobj=local_path,
-            path_in_repo=remote_path,
+    result = subprocess.run(
+        ["hf", "upload-large-folder", repo, export_root, "--repo-type", "dataset"],
+        capture_output=False,
+    )
+    if result.returncode != 0:
+        print(f"  upload-large-folder failed (exit {result.returncode}), falling back to upload_folder...")
+        api.upload_folder(
+            folder_path=export_root,
             repo_id=repo,
             repo_type="dataset",
         )
