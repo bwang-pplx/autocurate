@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=32G
 #SBATCH --gpus=1
-
+#SBATCH --qos=search
 # Needs 1 GPU because uv run resolves torch which requires CUDA at import
 # The actual download is CPU/network bound
 

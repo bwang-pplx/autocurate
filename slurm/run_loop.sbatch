@@ -6,7 +6,7 @@
 #SBATCH --gpus=8
 #SBATCH --cpus-per-task=64
 #SBATCH --mem=0
-
+#SBATCH --qos=search
 # 8 GPUs on one node:
 #   GPU 0-3: vLLM server (Qwen3.5-35B-A3B, TP=4)
 #   GPU 7:   training (train.py)
