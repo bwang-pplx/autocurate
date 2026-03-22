@@ -114,35 +114,8 @@ if grep -q "baseline" "$RESULTS" 2>/dev/null; then
 else
 echo "$(date) | === Baseline (no filter) ==="
 
-# Select all docs except eval set
-uv run python3 -c "
-import json, os
-import pyarrow.parquet as pq
-from prepare import list_raw_parquet_files, get_lang_dir, get_eval_dir
-lang = '$LANG'
-eval_ids = set()
-ep = os.path.join(get_eval_dir(lang), 'eval_doc_ids.json')
-if os.path.exists(ep):
-    eval_ids = set(json.load(open(ep)))
-MAX_DOCS = 5_000_000
-all_ids = []
-for fp in list_raw_parquet_files(lang):
-    pf = pq.ParquetFile(fp)
-    for rg in range(pf.num_row_groups):
-        ids = pf.read_row_group(rg).column('id').to_pylist()
-        all_ids.extend([i for i in ids if i not in eval_ids])
-        if len(all_ids) >= MAX_DOCS:
-            break
-    print(f'  {len(all_ids):,} docs...', flush=True)
-    if len(all_ids) >= MAX_DOCS:
-        break
-all_ids = all_ids[:MAX_DOCS]
-out = os.path.join(get_lang_dir(lang), 'selected_doc_ids.json')
-json.dump(all_ids, open(out, 'w'))
-print(f'Baseline: {len(all_ids):,} docs selected')
-"
-
-PYTHONUNBUFFERED=1 uv run train.py --lang "$LANG" 2>&1 | tee /tmp/train_${LANG_CODE}.log
+# Baseline: train with empty filter (clean+filter on the fly, no rules yet)
+PYTHONUNBUFFERED=1 CUDA_VISIBLE_DEVICES=7 uv run train.py --lang "$LANG" 2>&1 | tee /tmp/train_${LANG_CODE}.log
 BASELINE_BPB=$(grep "^val_bpb:" /tmp/train_${LANG_CODE}.log | awk '{print $2}')
 BASELINE_MEM=$(grep "^peak_vram_mb:" /tmp/train_${LANG_CODE}.log | awk '{print $2}')
 
@@ -172,9 +145,6 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
 
     # Step 1: Peek
     PEEK_ARGS="--lang $LANG --iteration $ITER --seed $SEED"
-    if [ "$ITER" -gt 5 ]; then
-        PEEK_ARGS="$PEEK_ARGS --from-filtered"
-    fi
 
     echo "$(date) | [iter $ITER] Peeking..."
     CUDA_VISIBLE_DEVICES="" PYTHONUNBUFFERED=1 uv run peek.py $PEEK_ARGS 2>&1
@@ -197,11 +167,7 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
     fi
     COMMIT=$(git rev-parse --short HEAD)
 
-    # Step 3: Filter
-    echo "$(date) | [iter $ITER] Filtering..."
-    CUDA_VISIBLE_DEVICES="" PYTHONUNBUFFERED=1 uv run filter.py --lang "$LANG" 2>&1
-
-    # Step 4: Train
+    # Step 3: Train (filter happens on the fly inside the dataloader)
     echo "$(date) | [iter $ITER] Training..."
     CUDA_VISIBLE_DEVICES=7 PYTHONUNBUFFERED=1 uv run train.py --lang "$LANG" 2>&1 | tee /tmp/train_${LANG_CODE}.log
 

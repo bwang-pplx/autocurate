@@ -325,22 +325,16 @@ def _sample_raw_eval(lang, n_docs):
 
 def make_filtered_dataloader(tokenizer, B, T, lang):
     """
-    Dataloader that reads raw parquet, applies filter.py's clean+filter,
-    tokenizes on the fly, and packs into batches.
+    Dataloader that reads raw parquet, applies clean+filter on the fly,
+    tokenizes, and packs into batches. No pre-filtering step needed.
     """
     import torch
-
-    # Load selected doc IDs from filter.py output
-    ids_path = os.path.join(get_lang_dir(lang), "selected_doc_ids.json")
-    with open(ids_path) as f:
-        selected_ids = set(json.load(f))
-    print(f"Filtered dataloader: {len(selected_ids):,} selected docs")
-
-    # Import cleaning function from language-specific filter
     import importlib
+
+    # Import language-specific filter
     lang_code = lang.split("_")[0]
     lang_mod = importlib.import_module(f"filter_{lang_code}")
-    clean = lang_mod.clean
+    print(f"Filtered dataloader: applying filter_{lang_code}.py on the fly")
 
     bos_token = tokenizer.get_bos_token_id()
     row_capacity = T + 1
@@ -366,9 +360,10 @@ def make_filtered_dataloader(tokenizer, B, T, lang):
     TOKENIZE_BATCH = 128
 
     def _doc_iterator():
-        """Infinite iterator over cleaned, tokenized docs from selected set."""
+        """Infinite iterator: read docs, clean+filter on the fly, tokenize."""
         epoch = 1
         docs_yielded = 0
+        docs_dropped = 0
         t_start = time.time()
         while True:
             for fi, filepath in enumerate(parquet_files):
@@ -378,15 +373,18 @@ def make_filtered_dataloader(tokenizer, B, T, lang):
                     texts = rg.column("text").to_pylist()
                     ids = rg.column("id").to_pylist()
 
-                    # Filter to selected IDs and clean
                     batch_texts = []
                     for doc_id, text in zip(ids, texts):
-                        if doc_id in selected_ids and doc_id not in eval_ids:
-                            cleaned = clean(text)
-                            if cleaned.strip():
-                                batch_texts.append(cleaned)
+                        if doc_id in eval_ids:
+                            continue
+                        # Clean and filter on the fly
+                        cleaned = lang_mod.clean(text)
+                        if not lang_mod.should_keep(cleaned):
+                            docs_dropped += 1
+                            continue
+                        if cleaned.strip():
+                            batch_texts.append(cleaned)
 
-                        # Batch tokenize when we have enough
                         if len(batch_texts) >= TOKENIZE_BATCH:
                             token_lists = tokenizer.encode(batch_texts, prepend=bos_token)
                             for tokens in token_lists:
@@ -394,7 +392,6 @@ def make_filtered_dataloader(tokenizer, B, T, lang):
                                 yield tokens, epoch
                             batch_texts = []
 
-                    # Flush remaining
                     if batch_texts:
                         token_lists = tokenizer.encode(batch_texts, prepend=bos_token)
                         for tokens in token_lists:
@@ -402,10 +399,11 @@ def make_filtered_dataloader(tokenizer, B, T, lang):
                             yield tokens, epoch
                         batch_texts = []
 
-                # Log once per file
                 if fi == 0 or (fi + 1) % 5 == 0:
                     elapsed = time.time() - t_start
-                    print(f"  [dataloader] epoch {epoch}, file {fi+1}/{len(parquet_files)}, {docs_yielded:,} docs, {elapsed:.0f}s")
+                    total = docs_yielded + docs_dropped
+                    kept_pct = 100 * docs_yielded / max(total, 1)
+                    print(f"  [dataloader] epoch {epoch}, file {fi+1}/{len(parquet_files)}, {docs_yielded:,} kept ({kept_pct:.0f}%), {elapsed:.0f}s")
 
             epoch += 1
 
