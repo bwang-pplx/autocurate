@@ -437,6 +437,11 @@ def verify_fix(lang, all_docs):
     if n_changed == 0 and n_filtered == 0:
         return False, f"No-op: function had no effect on any of {len(all_docs)} sampled docs"
 
+    # Reject if too aggressive (>50% of docs filtered)
+    filter_rate = n_filtered / max(len(all_docs), 1)
+    if filter_rate > 0.5:
+        return False, f"Too aggressive: filtered {n_filtered}/{len(all_docs)} ({filter_rate:.0%}) docs. Max 50%."
+
     return True, ""
 
 
@@ -647,6 +652,11 @@ if __name__ == "__main__":
             exit(1)
 
         tmpl = TEMPLATES[template_name]
+        # Cap string lists to 30 items to prevent hallucinated infinite lists
+        for k, v in parsed["params"].items():
+            if isinstance(v, list) and len(v) > 30:
+                print(f"  Capping param '{k}' from {len(v)} to 30 items")
+                parsed["params"][k] = v[:30]
         params_json = json.dumps(parsed["params"])
         # Generate a clean function that calls the template
         func_name = f"{tmpl['type']}_{template_name.lower()}_{args.iteration or 0}"
