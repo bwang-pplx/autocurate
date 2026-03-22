@@ -167,10 +167,12 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
         continue
     fi
 
-    # Step 2: Commit
+    # Step 2: Save backup and commit
+    FILTER_BACKUP="/tmp/filter_${LANG_CODE}_backup.py"
+    cp "filter_${LANG_CODE}.py" "$FILTER_BACKUP"
+
     if ! git diff --quiet "filter_${LANG_CODE}.py" 2>/dev/null; then
         DESCRIPTION="iteration $ITER"
-        [ -z "$DESCRIPTION" ] && DESCRIPTION="iteration $ITER"
         git_locked git add "filter_${LANG_CODE}.py"
         git_locked git commit -m "iter $ITER [$LANG_CODE]: $DESCRIPTION" --no-verify 2>/dev/null || true
     else
@@ -191,7 +193,8 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
         echo "$(date) | [iter $ITER] Training crashed!"
         tail -10 /tmp/train_${LANG_CODE}.log
         printf "%s\t0.000000\t0.0\tcrash\t%s\n" "$COMMIT" "$DESCRIPTION" >> "$RESULTS"
-        git_locked git checkout HEAD~1 -- "filter_${LANG_CODE}.py" 2>/dev/null
+        # Restore from backup (safe — doesn't touch other languages)
+        cp "$FILTER_BACKUP" "filter_${LANG_CODE}.py"
         git_locked git add "filter_${LANG_CODE}.py"
         git_locked git commit -m "revert iter $ITER [$LANG_CODE]" --no-verify 2>/dev/null || true
         continue
@@ -211,7 +214,8 @@ for ITER in $(seq 1 "$MAX_ITERATIONS"); do
         STATUS="discard"
         echo "$(date) | [iter $ITER] DISCARD — BPB $VAL_BPB >= $BEST_BPB"
         printf "%s\t%s\t%s\tdiscard\t%s\n" "$COMMIT" "$VAL_BPB" "$MEM_GB" "$DESCRIPTION" >> "$RESULTS"
-        git_locked git checkout HEAD~1 -- "filter_${LANG_CODE}.py" 2>/dev/null
+        # Restore from backup (safe — doesn't touch other languages)
+        cp "$FILTER_BACKUP" "filter_${LANG_CODE}.py"
         git_locked git add "filter_${LANG_CODE}.py"
         git_locked git commit -m "revert iter $ITER [$LANG_CODE]" --no-verify 2>/dev/null || true
     fi
