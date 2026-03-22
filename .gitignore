@@ -21,7 +21,6 @@ dev/
 
 # Results file
 results.tsv
-filter_*.py
 results_*.tsv
 peek_history_*.jsonl
 logs/
