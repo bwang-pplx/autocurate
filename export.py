@@ -6,12 +6,12 @@ writes cleaned parquet files, and pushes to HuggingFace.
 
 Each language is a config/subset, matching fineweb-2's structure:
   HuggingFaceFW/fineweb-2        → data/dan_Latn/train/*.parquet
-  bwang-pplx/fineweb-2-autocurate → data/dan_Latn/train/*.parquet
+  bowang0911/fineweb-2-autocurate → data/dan_Latn/train/*.parquet
 
 Usage:
     python export.py --lang dan_Latn                          # export locally
     python export.py --lang dan_Latn --push                   # export + push to HF
-    python export.py --lang dan_Latn --push --repo bwang-pplx/fineweb-2-autocurate
+    python export.py --lang dan_Latn --push --repo bowang0911/fineweb-2-autocurate
 
 NOTE: Run `python prepare.py --lang dan_Latn` WITHOUT --max-docs first
       to download the full dataset for export.
@@ -28,7 +28,7 @@ import pyarrow.parquet as pq
 
 from prepare import get_lang_dir, get_eval_dir, list_raw_parquet_files
 
-HF_REPO = "bwang-pplx/fineweb-2-autocurate"
+HF_REPO = "bowang0911/fineweb-2-autocurate"
 EXPORT_DIR = "export"
 
 # Preserve all original fineweb-2 columns (discovered at runtime)
