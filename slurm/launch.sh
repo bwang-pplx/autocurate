@@ -45,8 +45,6 @@ def clean(text):
     return text
 
 def should_keep(text):
-    if len(text.strip()) < 200:
-        return False
     for fn in FILTERS:
         if not fn(text):
             return False
